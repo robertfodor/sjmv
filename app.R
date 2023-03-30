@@ -34,25 +34,17 @@ ui <- dashboardPage(
         menuSubItem(
           text = "Central tendency",
           tabName = "descriptive_a"
-        ),
-        menuSubItem(
-          text = "Dispersion",
-          tabName = "descriptive_b"
-        ),
-        menuSubItem(
-          text = "Normality",
-          tabName = "descriptive_c"
         )
       ),
       menuItem("Settings",
         icon = icon("cog"),
         startExpanded = TRUE,
-        sliderInput(
-          "digits",
-          label = "Number of decimals",
-          min = 2,
-          max = 6,
-          value = 3
+        sliderTextInput(
+          inputId = "digits",
+          label = "Number of decimals:",
+          choices = seq(2, 6, 1),
+          grid = TRUE,
+          selected = 3
         )
       ),
       verbatimTextOutput("debug")
@@ -72,18 +64,8 @@ ui <- dashboardPage(
       ),
       tabItem(
         tabName = "descriptive_a",
-        h3("Central tendency and distribution"),
+        h2("Descriptive Statistics"),
         descriptive_ui("descriptive_a")
-      ),
-      tabItem(
-        tabName = "descriptive_b",
-        h3("Dispersion (measures of variability)"),
-        descriptive_ui("descriptive_b")
-      ),
-      tabItem(
-        tabName = "descriptive_c",
-        h3("Normality"),
-        descriptive_ui("descriptive_c")
       )
     )
   ),
