@@ -4,6 +4,7 @@ library(shinydashboard)
 library(sjlabelled)
 library(jmvReadWrite)
 library(DT)
+library(shinyWidgets)
 
 
 # Load dashboard tabs
@@ -45,7 +46,7 @@ ui <- dashboardPage(
       ),
       menuItem("Settings",
         icon = icon("cog"),
-        startExpanded = FALSE,
+        startExpanded = TRUE,
         sliderInput(
           "digits",
           label = "Number of decimals",
@@ -76,7 +77,7 @@ ui <- dashboardPage(
       ),
       tabItem(
         tabName = "descriptive_b",
-        h3("Dispersion (variability)"),
+        h3("Dispersion (measures of variability)"),
         descriptive_ui("descriptive_b")
       ),
       tabItem(

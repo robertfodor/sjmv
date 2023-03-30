@@ -5,6 +5,7 @@ library(DT) # for data tables
 library(dplyr) # for data manipulation
 library(ggplot2) # for plotting
 library(e1071) # skewness and kurtosis
+library(shinyWidgets) # for custom widgets
 
 descriptive_ui <- function(id) {
   ns <- NS(id)
@@ -13,6 +14,13 @@ descriptive_ui <- function(id) {
       fluidRow(
         column(
           width = 12,
+          h4("Settings:"),
+          materialSwitch(
+            inputId = ns("switch_columns_rows"),
+            label = "Show variables on top",
+            right = TRUE,
+            status = "info"
+          ),
           # verbatimTextOutput(ns("debug")),
           tableOutput(ns("descriptives")),
         )
@@ -58,7 +66,13 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
             "Median", "Mode",
             "Skewness", "Kurtosis"
           )
-          return(t(descriptives))
+
+          # If materialSwitch is on, transpose the table
+          if (input$switch_columns_rows) {
+            return(t(descriptives))
+          } else {
+            return(descriptives)
+          }
         },
         digits = digits,
         rownames = TRUE
