@@ -12,7 +12,6 @@ descriptive_ui <- function(id) {
   tagList(
     fluidPage(
       fluidRow(
-        h4("Settings:"),
         materialSwitch(
           inputId = ns("switch_columns_rows"),
           label = "Show variables on top",
@@ -20,15 +19,46 @@ descriptive_ui <- function(id) {
           status = "info",
           value = TRUE
         ),
-        awesomeCheckboxGroup(
-          inputId = "Id044",
-          label = "Checkboxes",
-          choices = c("A", "B", "C"),
-          selected = "A"
+        h4("Select statistics to display:"),
+        column(
+          width = 4,
+          awesomeCheckboxGroup(
+            inputId = ns("central_tendency"),
+            label = "Central tendency",
+            choices = c(
+              "N", "Missing", "Mean", "Mean SE",
+              "Median", "Mode", "Skewness", "Kurtosis"
+            ),
+            selected = c("N", "Mean", "Median", "Skewness", "Kurtosis")
+          )
+        ),
+        column(
+          width = 4,
+          awesomeCheckboxGroup(
+            inputId = ns("dispersion"),
+            label = "Dispersion",
+            choices = c(
+              "SD", "Var", "Range", "IQR", "Min", "Max"
+            ),
+            selected = c("SD", "IQR", "Min", "Max")
+          )
+        ),
+        column(
+          width = 4,
+          awesomeCheckboxGroup(
+            inputId = ns("normality"),
+            label = "Checkboxes",
+            choices = c("Shapiro-Wilk", "Shapiro-Wilk p-value", "Result"),
+            selected = c("Shapiro-Wilk p-value", "Result")
+          )
         )
       ),
       fluidRow(
-        tableOutput(ns("descriptives"))
+        verbatimTextOutput(ns("debug")),
+        column(
+          width = 12,
+          tableOutput(ns("descriptives"))
+        )
       )
     )
   )
@@ -51,14 +81,12 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         se = apply(df(), 2, function(x) {
           sqrt(var(x) / length(x))
         }),
+        sd = apply(df(), 2, sd),
+        var = apply(df(), 2, var),
         median = apply(df(), 2, median),
         mode = apply(df(), 2, function(x) {
           x[which.max(tabulate(match(x, x)))]
         }),
-        skewness = apply(df(), 2, skewness, type = 2),
-        kurtosis = apply(df(), 2, kurtosis, type = 2),
-        sd = apply(df(), 2, sd),
-        var = apply(df(), 2, var),
         range = apply(df(), 2, function(x) {
           max(x) - min(x)
         }),
@@ -67,6 +95,8 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         }),
         min = apply(df(), 2, min),
         max = apply(df(), 2, max),
+        skewness = apply(df(), 2, skewness, type = 2),
+        kurtosis = apply(df(), 2, kurtosis, type = 2),
         shapiro_wilk = apply(df(), 2, function(x) {
           shapiro.test(x)$statistic
         }),
@@ -76,12 +106,6 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         normal = apply(df(), 2, function(x) {
           shapiro.test(x)$p.value > .05
         })
-      )
-      colnames(descriptives) <- c(
-        "N", "Missing", "Mean", "Mean SE",
-        "Median", "Mode", "Skewness", "Kurtosis",
-        "SD", "Var", "Range", "IQR", "Min", "Max",
-        "Shapiro-Wilk", "Shapiro-Wilk p-value", "Normal distribution"
       )
 
       # If materialSwitch is on, transpose the table
@@ -94,4 +118,9 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
     digits = digits,
     rownames = TRUE
   )
+
+  # Debugging
+  output$debug <- renderPrint({
+    list()
+  })
 }
