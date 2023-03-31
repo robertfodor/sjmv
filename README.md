@@ -12,12 +12,9 @@ Supported file types are:
 - SPSS .sav files,
 - and Jamovi .omv files.
 
-<!--
 ## Getting Started
 
-To access the ShinyStat apps, please visit the following link
-
--->
+To access the ShinyStat apps, please visit the [link](https://robertfodor.shinyapps.io/ShinyStat/).
 
 ## Acknowledgments
 
