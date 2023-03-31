@@ -29,19 +29,7 @@ ui <- dashboardPage(
         text = "Descriptive Statistics",
         icon = icon(name = "bar-chart"),
         tabName = "descriptive"
-      ),
-      menuItem("Settings",
-        icon = icon("cog"),
-        startExpanded = FALSE,
-        sliderTextInput(
-          inputId = "digits",
-          label = "Number of decimals:",
-          choices = seq(2, 6, 1),
-          grid = TRUE,
-          selected = 3
-        )
-      ),
-      verbatimTextOutput("debug")
+      )
     )
   ),
   body = dashboardBody(
@@ -105,21 +93,6 @@ server <- function(input, output, session) {
       )
     }
   )
-
-  # Debug
-  output$debug <- renderPrint({
-    if (length(file_input$df) > 0) {
-      list(
-        # This works for SPSS files:
-        # as.numeric(levels(file_input$df[, "X1_Smoke"]))
-        # For jamovi files
-        # column_classes(),
-        # paste("Column number 3 is a:", column_classes()[3]),
-        # file_input$df[, "Country"],
-        # sjlabelled::as_numeric(file_input$df[, "Country"])
-      )
-    }
-  })
 }
 
 # Run the application
