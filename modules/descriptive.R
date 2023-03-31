@@ -12,13 +12,6 @@ descriptive_ui <- function(id) {
   tagList(
     fluidPage(
       fluidRow(
-        materialSwitch(
-          inputId = ns("switch_columns_rows"),
-          label = "Show variables on top",
-          right = TRUE,
-          status = "info",
-          value = TRUE
-        ),
         h4("Select statistics to display:"),
         column(
           width = 4,
@@ -27,9 +20,9 @@ descriptive_ui <- function(id) {
             label = "Central tendency",
             choices = c(
               "N", "Missing", "Mean", "Mean SE",
-              "Median", "Mode", "Skewness", "Kurtosis"
+              "Median", "Mode"
             ),
-            selected = c("N", "Mean", "Median", "Skewness", "Kurtosis")
+            selected = c("N", "Mean", "Median")
           )
         ),
         column(
@@ -46,11 +39,24 @@ descriptive_ui <- function(id) {
         column(
           width = 4,
           awesomeCheckboxGroup(
+            inputId = ns("skewness_kurtosis"),
+            label = "Skewness and kurtosis",
+            choices = c("Skewness", "Kurtosis"),
+            selected = c("Skewness", "Kurtosis")
+          ),
+          awesomeCheckboxGroup(
             inputId = ns("normality"),
-            label = "Checkboxes",
-            choices = c("Shapiro-Wilk", "Shapiro-Wilk p-value", "Result"),
-            selected = c("Shapiro-Wilk p-value", "Result")
+            label = "Normality",
+            choices = c("Shapiro-Wilk", "Shapiro-Wilk p-value", "Normal"),
+            selected = NULL
           )
+        ),
+        materialSwitch(
+          inputId = ns("switch_columns_rows"),
+          label = "Show variables on top",
+          right = TRUE,
+          status = "info",
+          value = FALSE
         )
       ),
       fluidRow(
@@ -81,12 +87,12 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         se = apply(df(), 2, function(x) {
           sqrt(var(x) / length(x))
         }),
-        sd = apply(df(), 2, sd),
-        var = apply(df(), 2, var),
         median = apply(df(), 2, median),
         mode = apply(df(), 2, function(x) {
           x[which.max(tabulate(match(x, x)))]
         }),
+        sd = apply(df(), 2, sd),
+        var = apply(df(), 2, var),
         range = apply(df(), 2, function(x) {
           max(x) - min(x)
         }),
@@ -95,24 +101,54 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         }),
         min = apply(df(), 2, min),
         max = apply(df(), 2, max),
-        skewness = apply(df(), 2, skewness, type = 2),
-        kurtosis = apply(df(), 2, kurtosis, type = 2),
         shapiro_wilk = apply(df(), 2, function(x) {
           shapiro.test(x)$statistic
         }),
+        # If Shapiro-Wilk p-value is <.001, display "<.001" as text
+        #   otherwise force 3 digits
         shapiro_wilk_p = apply(df(), 2, function(x) {
-          shapiro.test(x)$p.value
+          if (shapiro.test(x)$p.value < .001) {
+            "<.001"
+          } else {
+            round(shapiro.test(x)$p.value, 3)
+          }
         }),
         normal = apply(df(), 2, function(x) {
-          shapiro.test(x)$p.value > .05
-        })
+          if (shapiro.test(x)$p.value < .05) {
+            "Not normal"
+          } else {
+            "Normal"
+          }
+        }),
+        skewness = apply(df(), 2, skewness, type = 2),
+        kurtosis = apply(df(), 2, kurtosis, type = 2)
       )
+
+      # Assign column names based on list
+      colnames(descriptives) <- c(
+        "N", "Missing", "Mean", "Mean SE",
+        "Median", "Mode", "SD", "Var",
+        "Range", "IQR", "Min", "Max",
+        "Shapiro-Wilk", "Shapiro-Wilk p-value", "Normal",
+        "Skewness", "Kurtosis"
+      )
+
+      # Filter the table based on the checkboxes using dplyr
+      subset_descriptives <- descriptives %>%
+        select(
+          c(
+            input$central_tendency,
+            input$dispersion,
+            input$skewness_kurtosis,
+            input$normality
+          )
+        )
 
       # If materialSwitch is on, transpose the table
       if (input$switch_columns_rows) {
-        return(t(descriptives))
+        return(t(subset_descriptives))
       } else {
-        return(descriptives)
+        return(subset_descriptives)
       }
     },
     digits = digits,
