@@ -1,7 +1,6 @@
 # This is the descriptive statistics tab for ShinyStat.
 # It takes as input the datafile uploaded in the Getting Started tab.
 library(shiny)
-library(DT) # for data tables
 library(dplyr) # for data manipulation
 library(ggplot2) # for plotting
 library(e1071) # skewness and kurtosis
@@ -60,7 +59,7 @@ descriptive_ui <- function(id) {
         )
       ),
       fluidRow(
-        verbatimTextOutput(ns("debug")),
+        # verbatimTextOutput(ns("debug")), # left here for future debugging
         column(
           width = 12,
           tableOutput(ns("descriptives"))
@@ -70,7 +69,9 @@ descriptive_ui <- function(id) {
   )
 }
 
-descriptive_server <- function(input, output, session, descr_df, which_analysis, digits) {
+descriptive_server <- function(
+    input, output, session,
+    descr_df, which_analysis, digits) {
   df <- descr_df
 
   # Descriptive statistics
@@ -115,9 +116,9 @@ descriptive_server <- function(input, output, session, descr_df, which_analysis,
         }),
         normal = apply(df(), 2, function(x) {
           if (shapiro.test(x)$p.value < .05) {
-            "Not normal"
+            "FALSE"
           } else {
-            "Normal"
+            "TRUE"
           }
         }),
         skewness = apply(df(), 2, skewness, type = 2),
