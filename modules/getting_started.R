@@ -27,9 +27,12 @@ getting_started_ui <- function(id) {
               ".csv"
             )
           ),
-          verbatimTextOutput(
-            outputId = ns("debug")
+          uiOutput(
+            outputId = ns("warning_box")
           ),
+          # verbatimTextOutput(
+          #   outputId = ns("debug")
+          # ),
           uiOutput(
             outputId = ns("preview_tab")
           )
@@ -62,13 +65,46 @@ getting_started_server <- function(input, output, session) {
     datafile$df <- df
   })
 
+  # Render the warning box
+  output$warning_box <- renderUI({
+    if (!is.null(input$file) &&
+      length(which(sapply(datafile$df, is.factor))) > 0) {
+      box(
+        title = "Warning: factor variables detected",
+        status = "warning",
+        solidHeader = TRUE,
+        collapsible = FALSE,
+        collapsed = FALSE,
+        width = 12,
+        renderText(
+          paste(
+            "This datafile contains factor variables.",
+            "Factor variables are not suitable for certain statistical",
+            "tests (e.g. mean, SD), and will be excluded from analysis.",
+            "While you might consider converting factor variables to",
+            "numeric variables, caution is warranted when interpreting",
+            "results of tests run on converted variables."
+          )
+        ),
+        renderText(
+          paste(
+            "This data file contains the following factor variables:",
+            paste0(names(datafile$df)[sapply(
+              datafile$df,
+              is.factor
+            )], collapse = ", ")
+          )
+        )
+      )
+    } else {
+      NULL
+    }
+  })
+
   # Datafile variable dimensions and header
   output$debug <- renderPrint({
     if (!is.null(input$file)) {
       list(
-        data.frame(
-          class = sapply(datafile$df, class)
-        ),
         # get levels for all factors
         levels = sapply(datafile$df, function(x) {
           if (is.factor(x)) {
