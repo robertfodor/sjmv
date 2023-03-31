@@ -28,13 +28,7 @@ ui <- dashboardPage(
       menuItem(
         text = "Descriptive Statistics",
         icon = icon(name = "bar-chart"),
-        tabName = "descriptive",
-        startExpanded = FALSE,
-        uiOutput("variable_selection"),
-        menuSubItem(
-          text = "Central tendency",
-          tabName = "descriptive_a"
-        )
+        tabName = "descriptive"
       ),
       menuItem("Settings",
         icon = icon("cog"),
@@ -63,9 +57,8 @@ ui <- dashboardPage(
         getting_started_ui("getting_started")
       ),
       tabItem(
-        tabName = "descriptive_a",
-        h2("Descriptive Statistics"),
-        descriptive_ui("descriptive_a")
+        tabName = "descriptive",
+        descriptive_ui("descriptive")
       )
     )
   ),
@@ -92,28 +85,11 @@ server <- function(input, output, session) {
     }
   })
 
-  #  Output: Variable selection
-  output$variable_selection <- renderUI({
+  # Non-factor variables
+  non_factor_variables <- reactive({
     if (length(file_input$df) > 0) {
-      selectInput(
-        inputId = "var",
-        label = "Select numeric variables",
-        # Factors must be excluded from choices
-        choices = names(file_input$df)[column_classes() != "factor"],
-        selected = NULL,
-        multiple = TRUE
-      )
-    }
-  })
-
-  # Dataframe with selected variables
-  descr_df <- reactive({
-    if (is.null(input$var)) {
-      return(NULL)
-    } else {
       return(
-        # Filter the data frame based on column names
-        file_input$df[, input$var, drop = FALSE]
+        names(file_input$df)[column_classes() != "factor"]
       )
     }
   })
@@ -124,9 +100,8 @@ server <- function(input, output, session) {
       callModule(
         module = descriptive_server,
         id = input$tabs,
-        descr_df,
-        which_analysis = input$tabs,
-        digits = input$digits
+        file_input = file_input,
+        non_factor_variables = non_factor_variables()
       )
     }
   )
