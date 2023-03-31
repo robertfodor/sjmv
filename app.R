@@ -10,6 +10,7 @@ library(shinyWidgets)
 # Load dashboard tabs
 source("modules/getting_started.R") # Welcome and data import
 source("modules/descriptive.R") # Descriptive statistics
+source("modules/regression.R") # Regression analysis
 
 # Define UI for application
 ui <- dashboardPage(
@@ -29,6 +30,11 @@ ui <- dashboardPage(
         text = "Descriptive Statistics",
         icon = icon(name = "bar-chart"),
         tabName = "descriptive"
+      ),
+      menuItem(
+        text = "Regression Analysis",
+        icon = icon(name = "line-chart"),
+        tabName = "regression"
       )
     )
   ),
@@ -47,6 +53,10 @@ ui <- dashboardPage(
       tabItem(
         tabName = "descriptive",
         descriptive_ui("descriptive")
+      ),
+      tabItem(
+        tabName = "regression",
+        regression_ui("regression")
       )
     )
   ),
@@ -90,6 +100,17 @@ server <- function(input, output, session) {
         id = input$tabs,
         file_input = file_input,
         non_factor_variables = non_factor_variables()
+      )
+    }
+  )
+
+  #  Output: Regression analysis
+  observe(
+    if (substr(input$tabs, 1, 5) == "regre") {
+      callModule(
+        module = regression_server,
+        id = input$tabs,
+        file_input = file_input
       )
     }
   )

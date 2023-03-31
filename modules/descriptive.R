@@ -66,7 +66,7 @@ descriptive_ui <- function(id) {
               status = "info",
               value = FALSE
             ),
-            circle = TRUE, status = "danger",
+            circle = FALSE, status = "primary",
             icon = icon("gear"), width = "200px",
             tooltip = tooltipOptions(title = "Select inputs and adjust settings")
           )
