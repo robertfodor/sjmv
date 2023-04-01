@@ -6,6 +6,8 @@ library(ggplot2) # for plotting
 library(shinyWidgets) # for custom widgets
 library(car) # vif
 library(lm.beta) # standardized beta coefficients
+library(knitr) # for kable
+library(kableExtra) # extra formatting for kable
 
 # UI
 regression_ui <- function(id) {
@@ -42,7 +44,9 @@ regression_ui <- function(id) {
                         ),
                         circle = FALSE, status = "primary",
                         icon = icon("gear"), width = "200px",
-                        tooltip = tooltipOptions(title = "Adjust number of blocks")
+                        tooltip = tooltipOptions(
+                            title = "Adjust number of blocks"
+                        )
                     )
                 )
             ),
@@ -54,10 +58,9 @@ regression_ui <- function(id) {
                     h3("Model Change Measures"),
                     tableOutput(ns("model_change_measures")),
                     h3("Model Coefficients"),
-                    verbatimTextOutput(ns("model_coefficients")),
+                    tableOutput(ns("model_coefficients")),
                     h3("Model Plots"),
-                    plotOutput(ns("model_plots")),
-                    verbatimTextOutput(ns("debug"))
+                    plotOutput(ns("model_plots"))
                 )
             )
         )
@@ -80,7 +83,7 @@ regression_server <- function(
                 # use session ns for inputId naming
                 inputId = ns(paste0("block_", i)),
                 label = paste0("Predictor block ", i),
-                # Choices are unique columns in file_input$df not selected as outcome or in previous blocks
+                # Choices exclude outcome
                 choices = setdiff(
                     names(file_input$df),
                     c(
@@ -127,7 +130,6 @@ regression_server <- function(
 
     # empty_predictors is TRUE if any of the input$block_i is length 0
     empty_predictors <- reactive({
-        empty_predictors <- TRUE
         for (i in 1:input$blocks) {
             if (length(input[[paste0("block_", i)]]) == 0) {
                 empty_predictors <- TRUE
@@ -144,42 +146,24 @@ regression_server <- function(
         if (empty_predictors() == FALSE) {
             # Create a list of models
             models <- list()
-            # If predictors is not empty, build a model for each block
+            # Build a model for each block
             for (i in 1:input$blocks) {
-                models[[i]] <- lm(
-                    formula = as.formula(paste0(
-                        input$outcome, " ~ ",
-                        paste0(
-                            # Predictors are cumulative
-                            unlist(predictors()[1:i]),
-                            collapse = " + "
-                        )
-                    )),
-                    data = df()
-                )
+                models[[i]] <-
+                    lm(
+                        formula = as.formula(paste0(
+                            input$outcome, " ~ ",
+                            paste0(
+                                # Predictors are cumulative
+                                unlist(predictors()[1:i]),
+                                collapse = " + "
+                            )
+                        )),
+                        data = df()
+                    )
             }
-            # Standardize models
-            models[[i]] <- lm.beta(models[[i]])
             # Return a list of models
             return(models)
         }
-    })
-
-    # Model ANOVA
-    anova_stat <- reactive({
-        # Create a list of anova tables
-        anova_tables <- list()
-        # Compare each model to the previous model
-        if (length(models()) > 1) {
-            for (i in 2:length(models())) {
-                anova_tables[[i]] <- anova(
-                    models()[[i - 1]],
-                    models()[[i]]
-                )
-            }
-        }
-        # Return a list of anova tables
-        return(anova_tables)
     })
 
     # Model fit measures for each block in a table. Each row is a model.
@@ -230,11 +214,19 @@ regression_server <- function(
     )
     # Model change table
     output$model_change_measures <- renderTable(
-        {
+        { # Compare models with ANOVA
+            anova_tables <- list()
+            if (length(models()) > 1) {
+                for (i in 2:length(models())) {
+                    anova_tables[[i]] <- anova(
+                        models()[[i - 1]],
+                        models()[[i]]
+                    )
+                }
+            }
+
             # Create a list of model change measures
             model_change_measures <- data.frame()
-
-            # If models length is not null, build a model for each block
             if (length(models()) > 0) {
                 for (i in 1:length(models())) {
                     # Build model for each block
@@ -252,25 +244,25 @@ regression_server <- function(
                             ),
                             fstat.change = ifelse(
                                 length(models()) > 1 & i > 1,
-                                anova_stat()[[i]][2, 5],
+                                anova_tables[[i]][2, 5],
                                 # F statistic for the first model
                                 summary(models()[[1]])$fstatistic[1]
                             ),
                             df1 = ifelse(
                                 length(models()) > 1 & i > 1,
-                                anova_stat()[[i]][2, 3],
+                                anova_tables[[i]][2, 3],
                                 # F statistic for the first model
                                 summary(models()[[1]])$fstatistic[2]
                             ),
                             df2 = ifelse(
                                 length(models()) > 1 & i > 1,
-                                anova_stat()[[i]][2, 1],
+                                anova_tables[[i]][2, 1],
                                 # F statistic for the first model
                                 summary(models()[[1]])$fstatistic[3]
                             ),
                             p.value = ifelse(
                                 length(models()) > 1 & i > 1,
-                                anova_stat()[[i]][2, 6],
+                                anova_tables[[i]][2, 6],
                                 # F statistic for the first model
                                 pf(
                                     summary(models()[[1]])$fstatistic[1],
@@ -279,6 +271,9 @@ regression_server <- function(
                                     lower.tail = FALSE
                                 )
                             ),
+                            # durbin.watson = car::durbinWatsonTest(
+                            #     models()[[i]]
+                            # )$statistic[1],
                             stringsAsFactors = FALSE
                         )
                     )
@@ -288,14 +283,72 @@ regression_server <- function(
                 colnames(model_change_measures) <- c(
                     "Model", "R²", "ΔR²",
                     "ΔF", "df1", "df2", "Δp-value"
+                    # "Durbin-Watson"
                 )
                 return(model_change_measures)
             }
         },
         digits = digits
     )
-    # Debug
-    output$debug <- renderPrint({
-        list()
-    })
+
+    # Model coefficients table
+    output$model_coefficients <- renderTable(
+        {
+            # Create a list of model coefficients
+            model_coefficients <- data.frame()
+
+            # If models length is not null, build a model for each block
+            if (length(models()) > 0) {
+                for (i in 1:length(models())) {
+                    # VIF terms check
+                    if (length(labels(terms(models()[[i]]))) > 1) {
+                        vif <- c(NA, car::vif(models()[[i]]))
+                    } else {
+                        vif <- c(NA, NA)
+                    }
+
+                    # Build model for each block
+                    model_coefficients <- rbind(
+                        model_coefficients,
+                        data.frame(
+                            #  First column is the model number
+                            model = paste0(i),
+                            #  Second column is the variable name
+                            variable = rownames(
+                                summary(models()[[i]])$coefficients
+                            ),
+                            #  Third column is the coefficient
+                            coefficient = summary(models()[[i]])$coefficients[
+                                , 1
+                            ],
+                            #  Fourth column is the standard error
+                            se = summary(models()[[i]])$coefficients[, 2],
+                            #  Fifth column is the t statistic
+                            tstat = summary(models()[[i]])$coefficients[, 3],
+                            #  Sixth column is the p value
+                            p.value = summary(models()[[i]])$coefficients[
+                                , 4
+                            ],
+                            #   Seventh column is the Standardized β
+                            std.beta = summary(
+                                lm.beta(models()[[i]],
+                                    complete.standardization = TRUE
+                                )
+                            )$coefficients[, 2],
+                            tolerance = 1 / vif,
+                            vif = vif
+                        )
+                    )
+                }
+                # Column names
+                colnames(model_coefficients) <- c(
+                    "Model", "Variable", "B", "SE", "t", "p-value",
+                    "Std. β", "Tolerance", "VIF"
+                )
+
+                return(model_coefficients)
+            }
+        },
+        digits = digits
+    )
 }
