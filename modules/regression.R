@@ -80,44 +80,22 @@ regression_server <- function(
                 # use session ns for inputId naming
                 inputId = ns(paste0("block_", i)),
                 label = paste0("Predictor block ", i),
-                choices = setdiff(names(file_input$df), input$outcome),
+                # Choices are unique columns in file_input$df not selected as outcome or in previous blocks
+                choices = setdiff(
+                    names(file_input$df),
+                    c(
+                        input$outcome
+                    )
+                ),
+                # Pre-fill if there is already a predictor selected previously
+                #  This also prevents digit changes to reset the predictors
+                selected = isolate(input[[paste0("block_", i)]]),
                 multiple = TRUE
             )
         }
 
         # Return a list of UI elements
         return(ui_list)
-    })
-
-    # Update the choices of the pickerInput based on file_input$df
-    observeEvent(file_input$df, {
-        # Update the choices of the outcome pickerInput
-        updatePickerInput(
-            session = session,
-            inputId = "outcome",
-            choices = names(file_input$df)
-        )
-        # Update the choices of the predictor blocks
-        for (i in 1:input$blocks) {
-            updatePickerInput(
-                session = session,
-                inputId = paste0("block_", i),
-                choices = setdiff(names(file_input$df), input$outcome)
-            )
-        }
-    })
-
-    # empty_predictors is TRUE if any of the input$block_i is length 0
-    empty_predictors <- reactive({
-        empty_predictors <- TRUE
-        for (i in 1:input$blocks) {
-            if (length(input[[paste0("block_", i)]]) == 0) {
-                empty_predictors <- TRUE
-            } else {
-                empty_predictors <- FALSE
-            }
-        }
-        return(empty_predictors)
     })
 
     # Predictors
@@ -135,6 +113,29 @@ regression_server <- function(
             file_input$df %>%
                 select(input$outcome, unlist(predictors()))
         ))
+    })
+
+    # Update the choices of the pickerInput based on file_input$df
+    observeEvent(file_input$df, {
+        # Update the choices of the outcome pickerInput
+        updatePickerInput(
+            session = session,
+            inputId = "outcome",
+            choices = names(file_input$df)
+        )
+    })
+
+    # empty_predictors is TRUE if any of the input$block_i is length 0
+    empty_predictors <- reactive({
+        empty_predictors <- TRUE
+        for (i in 1:input$blocks) {
+            if (length(input[[paste0("block_", i)]]) == 0) {
+                empty_predictors <- TRUE
+            } else {
+                empty_predictors <- FALSE
+            }
+        }
+        return(empty_predictors)
     })
 
     # Model
