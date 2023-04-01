@@ -52,13 +52,6 @@ descriptive_ui <- function(id) {
               selected = NULL
             ),
             h4("Adjust display settings:"),
-            sliderTextInput(
-              inputId = ns("digits"),
-              label = "Number of decimals:",
-              choices = seq(2, 6, 1),
-              grid = TRUE,
-              selected = 2
-            ),
             materialSwitch(
               inputId = ns("switch_columns_rows"),
               label = "Show variables on top",
@@ -81,7 +74,7 @@ descriptive_ui <- function(id) {
 
 descriptive_server <- function(
     input, output, session,
-    file_input, non_factor_variables) {
+    file_input, non_factor_variables, digits) {
   # Update the choices of the pickerInput based on non_factor_variables
   observeEvent(
     non_factor_variables,
@@ -178,7 +171,7 @@ descriptive_server <- function(
         }
       }
     },
-    digits = input$digits,
+    digits = digits,
     rownames = TRUE
   )
 }

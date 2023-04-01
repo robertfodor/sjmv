@@ -35,6 +35,22 @@ ui <- dashboardPage(
         text = "Regression Analysis",
         icon = icon(name = "line-chart"),
         tabName = "regression"
+      ),
+      menuItem(
+        text = "About",
+        icon = icon(name = "info-circle"),
+        tabName = "about"
+      ),
+      menuItem(
+        text = "Settings",
+        icon = icon(name = "cog"),
+        sliderTextInput(
+          inputId = "digits",
+          label = "Decimal places:",
+          choices = seq(2, 6, 1),
+          grid = TRUE,
+          selected = 3
+        )
       )
     )
   ),
@@ -99,7 +115,8 @@ server <- function(input, output, session) {
         module = descriptive_server,
         id = input$tabs,
         file_input = file_input,
-        non_factor_variables = non_factor_variables()
+        non_factor_variables = non_factor_variables(),
+        digits = input$digits
       )
     }
   )
@@ -110,7 +127,8 @@ server <- function(input, output, session) {
       callModule(
         module = regression_server,
         id = input$tabs,
-        file_input = file_input
+        file_input = file_input,
+        digits = input$digits
       )
     }
   )
