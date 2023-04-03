@@ -349,8 +349,19 @@ regression_server <- function(
                 )
             }
 
+            # Create a vector of model names and count of variables
+            grouping <- factor(
+                coefficients$model,
+                levels = unique(coefficients$model)
+            )
+
             coefficients %>%
-                mutate_if(is.numeric, round, digits = digits) %>%
+                # Round numeric columns with sprintf to specified digits
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                # Format t
                 knitr::kable(
                     "html",
                     align = "c",
@@ -362,15 +373,26 @@ regression_server <- function(
                 ) %>%
                 kableExtra::kable_classic(
                     full_width = FALSE,
-                    html_font = "inherit"
+                    html_font = "inherit",
+                    position = "left"
                 ) %>%
                 kableExtra::add_header_above(c(
                     " " = 2,
                     "Unstandardised" = 2,
-                    "Hypothesis test" = 2,
+                    " " = 2,
                     "Standardized" = 1,
                     "Collinearity" = 2
-                ))
+                )) %>%
+                # Group rows by model number
+                kableExtra::group_rows(
+                    index = table(grouping)
+                ) %>%
+                kableExtra::footnote(
+                    general = paste0(
+                        "Dependent (outcome) variable: ",
+                        isolate(input$outcome)
+                    )
+                )
         }
     }
 }

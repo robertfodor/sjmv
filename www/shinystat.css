@@ -6,7 +6,8 @@ table {
   border-right: none;
 }
 
-thead {
+thead,
+tbody {
   border-bottom: 1px solid black;
 }
 
@@ -14,6 +15,8 @@ td,
 th {
   padding-right: 12px;
   padding-left: 12px;
+  padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 th > div {
