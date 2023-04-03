@@ -352,10 +352,15 @@ regression_server <- function(
             # Create a vector of model names and count of variables
             grouping <- factor(
                 coefficients$model,
-                levels = unique(coefficients$model)
+                levels = unique(coefficients$model),
+                labels = paste0("Model ", unique(coefficients$model))
             )
 
+            print(table(grouping))
+
             coefficients %>%
+                # Discard column "model"
+                dplyr::select(-model) %>%
                 # Round numeric columns with sprintf to specified digits
                 dplyr::mutate_if(
                     is.numeric,
@@ -367,7 +372,7 @@ regression_server <- function(
                     align = "c",
                     row.names = FALSE,
                     col.names = c(
-                        "Model", "Variable", "B coeff.", "SE", "t", "p-value",
+                        "Variable", "B coeff.", "SE", "t", "p-value",
                         "β coeff.", "Tolerance", "VIF"
                     )
                 ) %>%
@@ -377,7 +382,7 @@ regression_server <- function(
                     position = "left"
                 ) %>%
                 kableExtra::add_header_above(c(
-                    " " = 2,
+                    " " = 1,
                     "Unstandardised" = 2,
                     " " = 2,
                     "Standardized" = 1,
@@ -385,7 +390,8 @@ regression_server <- function(
                 )) %>%
                 # Group rows by model number
                 kableExtra::group_rows(
-                    index = table(grouping)
+                    index = table(grouping),
+                    group_label = paste0("Model ", grouping)
                 ) %>%
                 kableExtra::footnote(
                     general = paste0(
