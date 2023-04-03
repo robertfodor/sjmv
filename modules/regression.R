@@ -124,7 +124,9 @@ regression_server <- function(
         updatePickerInput(
             session = session,
             inputId = "outcome",
-            choices = names(file_input$df)
+            choices = names(file_input$df),
+            # When digits are changed it shouldn't reset to 1st col.
+            selected = isolate(input$outcome)
         )
     })
 
@@ -325,9 +327,16 @@ regression_server <- function(
                         #  Fifth column is the t statistic
                         tstat = summary(models()[[i]])$coefficients[, 3],
                         #  Sixth column is the p value
-                        p.value = summary(models()[[i]])$coefficients[
-                            , 4
-                        ],
+                        #   If the p value is less than 0.001, return "<0.001"
+                        p.value = ifelse(
+                            round(summary(
+                                models()[[i]]
+                            )$coefficients[, 4], 3) < 0.001,
+                            "<0.001",
+                            as.character(round(summary(
+                                models()[[i]]
+                            )$coefficients[, 4], digits = digits))
+                        ),
                         #   Seventh column is the Standardized β
                         std.beta = summary(
                             lm.beta(models()[[i]],
@@ -339,18 +348,25 @@ regression_server <- function(
                     )
                 )
             }
-            # Column names
-            colnames(coefficients) <- c(
-                "Model", "Variable", "B", "SE", "t", "p-value",
-                "Std. β", "Tolerance", "VIF"
-            )
 
             coefficients %>%
                 mutate_if(is.numeric, round, digits = digits) %>%
-                knitr::kable("html") %>%
-                add_header_above(c(
-                    "Model" = 2,
-                    "Unstandardised" = 3,
+                knitr::kable(
+                    "html",
+                    align = "c",
+                    row.names = FALSE,
+                    col.names = c(
+                        "Model", "Variable", "B coeff.", "SE", "t", "p-value",
+                        "β coeff.", "Tolerance", "VIF"
+                    )
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit"
+                ) %>%
+                kableExtra::add_header_above(c(
+                    " " = 2,
+                    "Unstandardised" = 2,
                     "Hypothesis test" = 2,
                     "Standardized" = 1,
                     "Collinearity" = 2
