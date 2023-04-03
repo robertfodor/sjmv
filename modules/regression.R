@@ -292,63 +292,69 @@ regression_server <- function(
     )
 
     # Model coefficients table
-    output$model_coefficients <- renderTable(
-        {
-            # Create a list of model coefficients
-            model_coefficients <- data.frame()
+    output$model_coefficients <- function() {
+        # Create a list of model coefficients
+        coefficients <- data.frame()
 
-            # If models length is not null, build a model for each block
-            if (length(models()) > 0) {
-                for (i in 1:length(models())) {
-                    # VIF terms check
-                    if (length(labels(terms(models()[[i]]))) > 1) {
-                        vif <- c(NA, car::vif(models()[[i]]))
-                    } else {
-                        vif <- c(NA, NA)
-                    }
-
-                    # Build model for each block
-                    model_coefficients <- rbind(
-                        model_coefficients,
-                        data.frame(
-                            #  First column is the model number
-                            model = paste0(i),
-                            #  Second column is the variable name
-                            variable = rownames(
-                                summary(models()[[i]])$coefficients
-                            ),
-                            #  Third column is the coefficient
-                            coefficient = summary(models()[[i]])$coefficients[
-                                , 1
-                            ],
-                            #  Fourth column is the standard error
-                            se = summary(models()[[i]])$coefficients[, 2],
-                            #  Fifth column is the t statistic
-                            tstat = summary(models()[[i]])$coefficients[, 3],
-                            #  Sixth column is the p value
-                            p.value = summary(models()[[i]])$coefficients[
-                                , 4
-                            ],
-                            #   Seventh column is the Standardized β
-                            std.beta = summary(
-                                lm.beta(models()[[i]],
-                                    complete.standardization = TRUE
-                                )
-                            )$coefficients[, 2],
-                            tolerance = 1 / vif,
-                            vif = vif
-                        )
-                    )
+        # If models length is not null, build a model for each block
+        if (length(models()) > 0) {
+            for (i in 1:length(models())) {
+                # VIF terms check
+                if (length(labels(terms(models()[[i]]))) > 1) {
+                    vif <- c(NA, car::vif(models()[[i]]))
+                } else {
+                    vif <- c(NA, NA)
                 }
-                # Column names
-                colnames(model_coefficients) <- c(
-                    "Model", "Variable", "B", "SE", "t", "p-value",
-                    "Std. β", "Tolerance", "VIF"
-                )
 
-                return(model_coefficients)
+                # Build model for each block
+                coefficients <- rbind(
+                    coefficients,
+                    data.frame(
+                        #  First column is the model number
+                        model = paste0(i),
+                        #  Second column is the variable name
+                        variable = rownames(
+                            summary(models()[[i]])$coefficients
+                        ),
+                        #  Third column is the coefficient
+                        coefficient = summary(models()[[i]])$coefficients[
+                            , 1
+                        ],
+                        #  Fourth column is the standard error
+                        se = summary(models()[[i]])$coefficients[, 2],
+                        #  Fifth column is the t statistic
+                        tstat = summary(models()[[i]])$coefficients[, 3],
+                        #  Sixth column is the p value
+                        p.value = summary(models()[[i]])$coefficients[
+                            , 4
+                        ],
+                        #   Seventh column is the Standardized β
+                        std.beta = summary(
+                            lm.beta(models()[[i]],
+                                complete.standardization = TRUE
+                            )
+                        )$coefficients[, 2],
+                        tolerance = 1 / vif,
+                        vif = vif
+                    )
+                )
             }
-        },
-        digits = digits
-    )
+            # Column names
+            colnames(coefficients) <- c(
+                "Model", "Variable", "B", "SE", "t", "p-value",
+                "Std. β", "Tolerance", "VIF"
+            )
+
+            coefficients %>%
+                mutate_if(is.numeric, round, digits = digits) %>%
+                knitr::kable("html") %>%
+                add_header_above(c(
+                    "Model" = 2,
+                    "Unstandardised" = 3,
+                    "Hypothesis test" = 2,
+                    "Standardized" = 1,
+                    "Collinearity" = 2
+                ))
+        }
+    }
 }
