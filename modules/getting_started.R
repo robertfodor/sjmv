@@ -30,9 +30,6 @@ getting_started_ui <- function(id) {
           uiOutput(
             outputId = ns("warning_box")
           ),
-          # verbatimTextOutput(
-          #   outputId = ns("debug")
-          # ),
           uiOutput(
             outputId = ns("preview_tab")
           )
@@ -78,44 +75,25 @@ getting_started_server <- function(input, output, session) {
         width = 12,
         renderText(
           paste(
-            "This datafile contains factor variables.",
-            "Factor variables are not suitable for certain statistical",
-            "tests (e.g. mean, SD), and will be excluded from analysis.",
-            "While you might consider converting factor variables to",
-            "numeric variables, caution is warranted when interpreting",
-            "results of tests run on converted variables."
-          )
-        ),
-        renderText(
-          paste(
             "This data file contains the following factor variables:",
             paste0(names(datafile$df)[sapply(
               datafile$df,
               is.factor
             )], collapse = ", ")
           )
+        ),
+        renderText(
+          paste(
+            "Factor variables are not suitable for certain statistical",
+            "tests (e.g. mean, SD), and will be excluded from analysis.",
+            "While you might consider converting factor variables to",
+            "numeric variables, caution is warranted when interpreting",
+            "results of tests run on converted variables."
+          )
         )
       )
     } else {
       NULL
-    }
-  })
-
-  # Datafile variable dimensions and header
-  output$debug <- renderPrint({
-    if (!is.null(input$file)) {
-      list(
-        # get levels for all factors
-        levels = sapply(datafile$df, function(x) {
-          if (is.factor(x)) {
-            levels(x)
-          } else {
-            NA
-          }
-        })
-      )
-    } else {
-      "No datafile loaded"
     }
   })
 
