@@ -2,7 +2,7 @@
 # It takes as input the datafile uploaded in the Getting Started tab.
 library(shiny)
 library(dplyr) # for data manipulation
-library(ggplot2) # for plotting
+library(gridExtra) # for grid.arrange
 library(shinyWidgets) # for custom widgets
 library(car) # vif
 library(lm.beta) # standardized beta coefficients
@@ -58,9 +58,7 @@ regression_ui <- function(id) {
                     h3("Model Change Measures"),
                     tableOutput(ns("model_change_measures")),
                     h3("Model Coefficients"),
-                    tableOutput(ns("model_coefficients")),
-                    h3("Model Plots"),
-                    plotOutput(ns("model_plots"))
+                    tableOutput(ns("model_coefficients"))
                 )
             )
         )
@@ -355,8 +353,6 @@ regression_server <- function(
                 levels = unique(coefficients$model),
                 labels = paste0("Model ", unique(coefficients$model))
             )
-
-            print(table(grouping))
 
             coefficients %>%
                 # Discard column "model"
