@@ -5,7 +5,7 @@ library(dplyr) # for data manipulation
 library(gridExtra) # for grid.arrange
 library(shinyWidgets) # for custom widgets
 library(car) # vif
-library(lm.beta) # standardized beta coefficients
+library(reghelper) # regression analysis (switch from lm.beta)
 library(knitr) # for kable
 library(kableExtra) # extra formatting for kable
 
@@ -34,19 +34,17 @@ regression_ui <- function(id) {
                 ),
                 column(
                     width = 6,
-                    dropdownButton(
-                        sliderTextInput(
-                            inputId = ns("blocks"),
-                            label = "Number of blocks:",
-                            choices = seq(1, 10, 1),
-                            grid = TRUE,
-                            selected = 1
-                        ),
-                        circle = FALSE, status = "primary",
-                        icon = icon("gear"), width = "200px",
-                        tooltip = tooltipOptions(
-                            title = "Adjust number of blocks"
-                        )
+                    sliderTextInput(
+                        inputId = ns("blocks"),
+                        label = "Number of predictor blocks:",
+                        choices = seq(1, 10, 1),
+                        grid = TRUE,
+                        selected = 1
+                    ),
+                    materialSwitch(
+                        inputId = ns("contrasts"),
+                        label = "Use contrasts for categorical variables?",
+                        value = TRUE
                     )
                 )
             ),
@@ -58,7 +56,14 @@ regression_ui <- function(id) {
                     h3("Model Change Measures"),
                     tableOutput(ns("model_change_measures")),
                     h3("Model Coefficients"),
-                    tableOutput(ns("model_coefficients"))
+                    tableOutput(ns("model_coefficients")),
+                    h3("Model Diagnostics"),
+                    tableOutput(ns("collinearity")),
+                    tableOutput(ns("autocorrelation")),
+                    tableOutput(ns("heteroscedasticity")),
+                    tableOutput(ns("influence")),
+                    tableOutput(ns("leverage")),
+                    plotOutput(ns("qq_residuals"))
                 )
             )
         )
@@ -175,6 +180,14 @@ regression_server <- function(
             # If models length is not null, build a model for each block
             if (length(models()) > 0) {
                 for (i in 1:length(models())) {
+                    # p-value
+                    p.value <- pf(
+                        summary(models()[[i]])$fstatistic[1],
+                        summary(models()[[i]])$fstatistic[2],
+                        summary(models()[[i]])$fstatistic[3],
+                        lower.tail = FALSE
+                    )
+
                     # Build model for each block
                     model_fit_measures <- rbind(
                         model_fit_measures,
@@ -189,14 +202,17 @@ regression_server <- function(
                             BIC = BIC(models()[[i]]),
                             RMSE = sqrt(mean(models()[[i]]$residuals^2)),
                             fstat = summary(models()[[i]])$fstatistic[1],
-                            df1 = summary(models()[[i]])$fstatistic[2],
-                            df2 = summary(models()[[i]])$fstatistic[3],
-                            p.value = pf(
-                                summary(models()[[i]])$fstatistic[1],
-                                summary(models()[[i]])$fstatistic[2],
-                                summary(models()[[i]])$fstatistic[3],
-                                lower.tail = FALSE
-                            ),
+                            df1 = as.character(round(
+                                summary(models()[[i]])$fstatistic[2], 0
+                            )),
+                            df2 = as.character(round(
+                                summary(models()[[i]])$fstatistic[3], 0
+                            )),
+                            p.value = if (p.value < 0.001) {
+                                "< 0.001"
+                            } else {
+                                as.character(round(p.value, digits = digits))
+                            },
                             stringsAsFactors = FALSE
                         )
                     )
@@ -245,25 +261,25 @@ regression_server <- function(
                             fstat.change = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 5],
-                                # F statistic for the first model
                                 summary(models()[[1]])$fstatistic[1]
                             ),
                             df1 = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 3],
-                                # F statistic for the first model
-                                summary(models()[[1]])$fstatistic[2]
+                                as.character(round(
+                                    summary(models()[[1]])$fstatistic[2], 0
+                                ))
                             ),
                             df2 = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 1],
-                                # F statistic for the first model
-                                summary(models()[[1]])$fstatistic[3]
+                                as.character(round(
+                                    summary(models()[[1]])$fstatistic[3], 0
+                                ))
                             ),
                             p.value = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 6],
-                                # F statistic for the first model
                                 pf(
                                     summary(models()[[1]])$fstatistic[1],
                                     summary(models()[[1]])$fstatistic[2],
@@ -271,9 +287,6 @@ regression_server <- function(
                                     lower.tail = FALSE
                                 )
                             ),
-                            # durbin.watson = car::durbinWatsonTest(
-                            #     models()[[i]]
-                            # )$statistic[1],
                             stringsAsFactors = FALSE
                         )
                     )
@@ -283,7 +296,6 @@ regression_server <- function(
                 colnames(model_change_measures) <- c(
                     "Model", "R²", "ΔR²",
                     "ΔF", "df1", "df2", "Δp-value"
-                    # "Durbin-Watson"
                 )
                 return(model_change_measures)
             }
@@ -299,13 +311,6 @@ regression_server <- function(
         # If models length is not null, build a model for each block
         if (length(models()) > 0) {
             for (i in 1:length(models())) {
-                # VIF terms check
-                if (length(labels(terms(models()[[i]]))) > 1) {
-                    vif <- c(NA, car::vif(models()[[i]]))
-                } else {
-                    vif <- c(NA, NA)
-                }
-
                 # Build model for each block
                 coefficients <- rbind(
                     coefficients,
@@ -336,13 +341,7 @@ regression_server <- function(
                             )$coefficients[, 4], digits = digits))
                         ),
                         #   Seventh column is the Standardized β
-                        std.beta = summary(
-                            lm.beta(models()[[i]],
-                                complete.standardization = TRUE
-                            )
-                        )$coefficients[, 2],
-                        tolerance = 1 / vif,
-                        vif = vif
+                        std.beta = reghelper::beta(models()[[i]])$coefficients[, 1]
                     )
                 )
             }
@@ -368,8 +367,9 @@ regression_server <- function(
                     align = "c",
                     row.names = FALSE,
                     col.names = c(
-                        "Variable", "B coeff.", "SE", "t", "p-value",
-                        "β coeff.", "Tolerance", "VIF"
+                        "Variable", "B coeff.", "SE",
+                        "t", "p-value",
+                        "β coeff."
                     )
                 ) %>%
                 kableExtra::kable_classic(
@@ -381,8 +381,7 @@ regression_server <- function(
                     " " = 1,
                     "Unstandardised" = 2,
                     " " = 2,
-                    "Standardized" = 1,
-                    "Collinearity" = 2
+                    "Standardized" = 1
                 )) %>%
                 # Group rows by model number
                 kableExtra::group_rows(
