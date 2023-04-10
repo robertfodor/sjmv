@@ -451,7 +451,15 @@ regression_server <- function(
                 }
             }
 
-            print(tolvif)
+            # Check Tolerance and VIF and add footnote.
+            #  Source: DOI: 10.12691/ajams-8-2-1
+            for (i in 1:nrow(tolvif)) {
+                if (tolvif$VIF[i] > 5) {
+                    tolvif$Variable[i] <- paste0(
+                        tolvif$Variable[i], footnote_marker_symbol(2, "html")
+                    )
+                }
+            }
 
             # Create a vector of model names and count of variables
             grouping <- factor(
@@ -464,15 +472,16 @@ regression_server <- function(
             tolvif %>%
                 # Discard column "model"
                 dplyr::select(-model) %>%
-                # sprintf to specified digits
+                # Round numeric columns with sprintf to specified digits
                 dplyr::mutate_if(
                     is.numeric,
                     ~ sprintf(paste0("%.", digits, "f"), .)
                 ) %>%
                 knitr::kable(
                     "html",
-                    caption = "Tolerance and VIF",
-                    align = "lcc"
+                    caption = "Multicollinearity diagnostics",
+                    align = "lcc",
+                    escape = FALSE
                 ) %>%
                 kableExtra::kable_classic(
                     full_width = FALSE,
@@ -483,6 +492,14 @@ regression_server <- function(
                 kableExtra::group_rows(
                     index = table(grouping),
                     group_label = paste0("Model ", grouping)
+                ) %>%
+                kableExtra::footnote(
+                    symbol_title = "Multicollinearity assumptions checked. ",
+                    symbol = "Severe multicollinearity detected:
+                    VIF > 5 and Tolerance < 0.2",
+                    symbol_manual = c(
+                        footnote_marker_symbol(2, "html")
+                    ),
                 )
         }
     }
