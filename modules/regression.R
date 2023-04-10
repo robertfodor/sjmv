@@ -4,8 +4,8 @@ library(shiny)
 library(dplyr) # for data manipulation
 library(gridExtra) # for grid.arrange
 library(shinyWidgets) # for custom widgets
-library(car) # vif
-library(lm.beta) # standardized beta coefficients
+library(olsrr) # vif, tolerance
+library(reghelper) # regression analysis (switch from lm.beta)
 library(knitr) # for kable
 library(kableExtra) # extra formatting for kable
 
@@ -34,18 +34,36 @@ regression_ui <- function(id) {
                 ),
                 column(
                     width = 6,
-                    dropdownButton(
-                        sliderTextInput(
-                            inputId = ns("blocks"),
-                            label = "Number of blocks:",
-                            choices = seq(1, 10, 1),
-                            grid = TRUE,
-                            selected = 1
-                        ),
-                        circle = FALSE, status = "primary",
-                        icon = icon("gear"), width = "200px",
-                        tooltip = tooltipOptions(
-                            title = "Adjust number of blocks"
+                    sliderTextInput(
+                        inputId = ns("blocks"),
+                        label = "Number of predictor blocks:",
+                        choices = seq(1, 10, 1),
+                        grid = TRUE,
+                        selected = 1
+                    ),
+                    materialSwitch(
+                        inputId = ns("contrasts"),
+                        label = "Numeric factors are categorical variables",
+                        value = TRUE
+                    ),
+                    box(
+                        title = "Factor variables",
+                        status = "warning",
+                        solidHeader = TRUE,
+                        collapsible = TRUE,
+                        collapsed = TRUE,
+                        width = "100%",
+                        tagList(
+                            HTML("<p>If you have factor variables that are coded
+                            as numbers in the source data, the linear model
+                            will use the contrast method. However, if you turn
+                            the <i>Numeric factors are categorical variables</i>
+                            switch off, the model will treat all factors as
+                            continuous variables. This will give different
+                            results for several statistics: R-squared, F test,
+                            t test, and model coefficients. The results will
+                            need to be interpreted very differently,
+                            so please be very careful!</p>")
                         )
                     )
                 )
@@ -58,7 +76,14 @@ regression_ui <- function(id) {
                     h3("Model Change Measures"),
                     tableOutput(ns("model_change_measures")),
                     h3("Model Coefficients"),
-                    tableOutput(ns("model_coefficients"))
+                    tableOutput(ns("model_coefficients")),
+                    h3("Model Diagnostics"),
+                    tableOutput(ns("collinearity")),
+                    tableOutput(ns("autocorrelation")),
+                    tableOutput(ns("heteroscedasticity")),
+                    tableOutput(ns("influence")),
+                    tableOutput(ns("leverage")),
+                    plotOutput(ns("qq_residuals"))
                 )
             )
         )
@@ -110,10 +135,17 @@ regression_server <- function(
 
     # Data frame
     df <- reactive({
-        return(data.frame(
+        df <- data.frame(
             file_input$df %>%
                 select(input$outcome, unlist(predictors()))
-        ))
+        )
+        # Convert factor predictors to numeric if input$contrasts is FALSE
+        if (input$contrasts == FALSE) {
+            df <- df %>%
+                mutate_if(is.factor, as.numeric)
+        }
+
+        return(df)
     })
 
     # Update the choices of the pickerInput based on file_input$df
@@ -141,7 +173,6 @@ regression_server <- function(
     })
 
     # Model
-    #  Only if no block is empty
     models <- reactive({
         if (empty_predictors() == FALSE) {
             # Create a list of models
@@ -161,6 +192,7 @@ regression_server <- function(
                         data = df()
                     )
             }
+
             # Return a list of models
             return(models)
         }
@@ -175,6 +207,14 @@ regression_server <- function(
             # If models length is not null, build a model for each block
             if (length(models()) > 0) {
                 for (i in 1:length(models())) {
+                    # p-value
+                    p_value <- pf(
+                        summary(models()[[i]])$fstatistic[1],
+                        summary(models()[[i]])$fstatistic[2],
+                        summary(models()[[i]])$fstatistic[3],
+                        lower.tail = FALSE
+                    )
+
                     # Build model for each block
                     model_fit_measures <- rbind(
                         model_fit_measures,
@@ -189,14 +229,17 @@ regression_server <- function(
                             BIC = BIC(models()[[i]]),
                             RMSE = sqrt(mean(models()[[i]]$residuals^2)),
                             fstat = summary(models()[[i]])$fstatistic[1],
-                            df1 = summary(models()[[i]])$fstatistic[2],
-                            df2 = summary(models()[[i]])$fstatistic[3],
-                            p.value = pf(
-                                summary(models()[[i]])$fstatistic[1],
-                                summary(models()[[i]])$fstatistic[2],
-                                summary(models()[[i]])$fstatistic[3],
-                                lower.tail = FALSE
-                            ),
+                            df1 = as.character(round(
+                                summary(models()[[i]])$fstatistic[2], 0
+                            )),
+                            df2 = as.character(round(
+                                summary(models()[[i]])$fstatistic[3], 0
+                            )),
+                            p_value = if (p_value < 0.001) {
+                                "< 0.001"
+                            } else {
+                                as.character(round(p_value, digits = digits))
+                            },
                             stringsAsFactors = FALSE
                         )
                     )
@@ -245,25 +288,25 @@ regression_server <- function(
                             fstat.change = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 5],
-                                # F statistic for the first model
                                 summary(models()[[1]])$fstatistic[1]
                             ),
                             df1 = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 3],
-                                # F statistic for the first model
-                                summary(models()[[1]])$fstatistic[2]
+                                as.character(round(
+                                    summary(models()[[1]])$fstatistic[2], 0
+                                ))
                             ),
                             df2 = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 1],
-                                # F statistic for the first model
-                                summary(models()[[1]])$fstatistic[3]
+                                as.character(round(
+                                    summary(models()[[1]])$fstatistic[3], 0
+                                ))
                             ),
                             p.value = ifelse(
                                 length(models()) > 1 & i > 1,
                                 anova_tables[[i]][2, 6],
-                                # F statistic for the first model
                                 pf(
                                     summary(models()[[1]])$fstatistic[1],
                                     summary(models()[[1]])$fstatistic[2],
@@ -271,9 +314,6 @@ regression_server <- function(
                                     lower.tail = FALSE
                                 )
                             ),
-                            # durbin.watson = car::durbinWatsonTest(
-                            #     models()[[i]]
-                            # )$statistic[1],
                             stringsAsFactors = FALSE
                         )
                     )
@@ -283,7 +323,6 @@ regression_server <- function(
                 colnames(model_change_measures) <- c(
                     "Model", "R²", "ΔR²",
                     "ΔF", "df1", "df2", "Δp-value"
-                    # "Durbin-Watson"
                 )
                 return(model_change_measures)
             }
@@ -299,13 +338,6 @@ regression_server <- function(
         # If models length is not null, build a model for each block
         if (length(models()) > 0) {
             for (i in 1:length(models())) {
-                # VIF terms check
-                if (length(labels(terms(models()[[i]]))) > 1) {
-                    vif <- c(NA, car::vif(models()[[i]]))
-                } else {
-                    vif <- c(NA, NA)
-                }
-
                 # Build model for each block
                 coefficients <- rbind(
                     coefficients,
@@ -313,8 +345,8 @@ regression_server <- function(
                         #  First column is the model number
                         model = paste0(i),
                         #  Second column is the variable name
-                        variable = rownames(
-                            summary(models()[[i]])$coefficients
+                        variable = names(
+                            models()[[i]]$coefficients
                         ),
                         #  Third column is the coefficient
                         coefficient = summary(models()[[i]])$coefficients[
@@ -336,13 +368,9 @@ regression_server <- function(
                             )$coefficients[, 4], digits = digits))
                         ),
                         #   Seventh column is the Standardized β
-                        std.beta = summary(
-                            lm.beta(models()[[i]],
-                                complete.standardization = TRUE
-                            )
-                        )$coefficients[, 2],
-                        tolerance = 1 / vif,
-                        vif = vif
+                        std.beta = reghelper::beta(
+                            models()[[i]]
+                        )$coefficients[, 1]
                     )
                 )
             }
@@ -365,11 +393,11 @@ regression_server <- function(
                 # Format t
                 knitr::kable(
                     "html",
-                    align = "c",
+                    align = c("l", rep("c", 5)),
                     row.names = FALSE,
                     col.names = c(
-                        "Variable", "B coeff.", "SE", "t", "p-value",
-                        "β coeff.", "Tolerance", "VIF"
+                        " ", "B coeff.", "SE",
+                        "t", "p-value", "β coeff."
                     )
                 ) %>%
                 kableExtra::kable_classic(
@@ -381,8 +409,7 @@ regression_server <- function(
                     " " = 1,
                     "Unstandardised" = 2,
                     " " = 2,
-                    "Standardized" = 1,
-                    "Collinearity" = 2
+                    "Standardized" = 1
                 )) %>%
                 # Group rows by model number
                 kableExtra::group_rows(
@@ -394,6 +421,85 @@ regression_server <- function(
                         "Dependent (outcome) variable: ",
                         isolate(input$outcome)
                     )
+                )
+        }
+    }
+
+    output$collinearity <- function() {
+        tolvif <- data.frame()
+
+        if (length(models()) > 0) {
+            for (i in 1:length(models())) {
+                if (length(models()[[i]]$coefficients) > 2) {
+                    tolvif <- rbind(tolvif, data.frame(
+                        model = paste0("", i),
+                        Variable =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 1],
+                        Tolerance =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 2],
+                        VIF =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 3]
+                    ))
+                } else {
+                    tolvif <- rbind(tolvif, data.frame(
+                        model = paste0("", i),
+                        Variable = names(models()[[i]]$coefficients),
+                        Tolerance = 1,
+                        VIF = 1
+                    ) %>% # remove intercept
+                        dplyr::filter(Variable != "(Intercept)"))
+                }
+            }
+
+            # Check Tolerance and VIF and add footnote.
+            #  Source: DOI: 10.12691/ajams-8-2-1
+            for (i in 1:nrow(tolvif)) {
+                if (tolvif$VIF[i] > 5) {
+                    tolvif$Variable[i] <- paste0(
+                        tolvif$Variable[i], footnote_marker_symbol(2, "html")
+                    )
+                }
+            }
+
+            # Create a vector of model names and count of variables
+            grouping <- factor(
+                tolvif$model,
+                levels = unique(tolvif$model),
+                labels = paste0("Model ", unique(tolvif$model))
+            )
+
+            # Formatting
+            tolvif %>%
+                # Discard column "model"
+                dplyr::select(-model) %>%
+                # Round numeric columns with sprintf to specified digits
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    caption = "Multicollinearity diagnostics",
+                    align = "lcc",
+                    escape = FALSE
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                # Group rows by model number
+                kableExtra::group_rows(
+                    index = table(grouping),
+                    group_label = paste0("Model ", grouping)
+                ) %>%
+                kableExtra::footnote(
+                    symbol_title = "Multicollinearity assumptions checked. ",
+                    symbol = "Severe multicollinearity detected:
+                    VIF > 5 and Tolerance < 0.2",
+                    symbol_manual = c(
+                        footnote_marker_symbol(2, "html")
+                    ),
                 )
         }
     }
