@@ -43,8 +43,28 @@ regression_ui <- function(id) {
                     ),
                     materialSwitch(
                         inputId = ns("contrasts"),
-                        label = "Use contrasts for categorical variables?",
+                        label = "Numeric factors are categorical variables",
                         value = TRUE
+                    ),
+                    box(
+                        title = "Factor variables",
+                        status = "warning",
+                        solidHeader = TRUE,
+                        collapsible = TRUE,
+                        collapsed = TRUE,
+                        width = "100%",
+                        tagList(
+                            HTML("<p>If you have factor variables that are coded
+                            as numbers in the source data, the linear model
+                            will use the contrast method. However, if you turn
+                            the <i>Numeric factors are categorical variables</i>
+                            switch off, the model will treat all factors as
+                            continuous variables. This will give different
+                            results for several statistics: R-squared, F test,
+                            t test, and model coefficients. The results will
+                            need to be interpreted very differently,
+                            so please be very careful!</p>")
+                        )
                     )
                 )
             ),
@@ -115,10 +135,17 @@ regression_server <- function(
 
     # Data frame
     df <- reactive({
-        return(data.frame(
+        df <- data.frame(
             file_input$df %>%
                 select(input$outcome, unlist(predictors()))
-        ))
+        )
+        # Convert factor predictors to numeric if input$contrasts is FALSE
+        if (input$contrasts == FALSE) {
+            df <- df %>%
+                mutate_if(is.factor, as.numeric)
+        }
+
+        return(df)
     })
 
     # Update the choices of the pickerInput based on file_input$df
@@ -146,7 +173,6 @@ regression_server <- function(
     })
 
     # Model
-    #  Only if no block is empty
     models <- reactive({
         if (empty_predictors() == FALSE) {
             # Create a list of models
@@ -166,6 +192,7 @@ regression_server <- function(
                         data = df()
                     )
             }
+
             # Return a list of models
             return(models)
         }
@@ -311,6 +338,12 @@ regression_server <- function(
         # If models length is not null, build a model for each block
         if (length(models()) > 0) {
             for (i in 1:length(models())) {
+                # Rename the model names to original predictor names
+                #  if contrasts are not used
+                names(models()[[i]]$coefficients) %>%
+                    # Remove "as.numeric(as.character" from the names
+                    gsub("as.numeric\\(as.character\\(.*\\)\\)", "", .)
+
                 # Build model for each block
                 coefficients <- rbind(
                     coefficients,
@@ -318,8 +351,8 @@ regression_server <- function(
                         #  First column is the model number
                         model = paste0(i),
                         #  Second column is the variable name
-                        variable = rownames(
-                            summary(models()[[i]])$coefficients
+                        variable = names(
+                            models()[[i]]$coefficients
                         ),
                         #  Third column is the coefficient
                         coefficient = summary(models()[[i]])$coefficients[
@@ -341,7 +374,9 @@ regression_server <- function(
                             )$coefficients[, 4], digits = digits))
                         ),
                         #   Seventh column is the Standardized β
-                        std.beta = reghelper::beta(models()[[i]])$coefficients[, 1]
+                        std.beta = reghelper::beta(
+                            models()[[i]]
+                        )$coefficients[, 1]
                     )
                 )
             }
