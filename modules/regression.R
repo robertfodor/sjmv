@@ -4,7 +4,7 @@ library(shiny)
 library(dplyr) # for data manipulation
 library(gridExtra) # for grid.arrange
 library(shinyWidgets) # for custom widgets
-library(car) # vif
+library(olsrr) # vif, tolerance
 library(reghelper) # regression analysis (switch from lm.beta)
 library(knitr) # for kable
 library(kableExtra) # extra formatting for kable
@@ -208,7 +208,7 @@ regression_server <- function(
             if (length(models()) > 0) {
                 for (i in 1:length(models())) {
                     # p-value
-                    p.value <- pf(
+                    p_value <- pf(
                         summary(models()[[i]])$fstatistic[1],
                         summary(models()[[i]])$fstatistic[2],
                         summary(models()[[i]])$fstatistic[3],
@@ -235,10 +235,10 @@ regression_server <- function(
                             df2 = as.character(round(
                                 summary(models()[[i]])$fstatistic[3], 0
                             )),
-                            p.value = if (p.value < 0.001) {
+                            p_value = if (p_value < 0.001) {
                                 "< 0.001"
                             } else {
-                                as.character(round(p.value, digits = digits))
+                                as.character(round(p_value, digits = digits))
                             },
                             stringsAsFactors = FALSE
                         )
@@ -338,12 +338,6 @@ regression_server <- function(
         # If models length is not null, build a model for each block
         if (length(models()) > 0) {
             for (i in 1:length(models())) {
-                # Rename the model names to original predictor names
-                #  if contrasts are not used
-                names(models()[[i]]$coefficients) %>%
-                    # Remove "as.numeric(as.character" from the names
-                    gsub("as.numeric\\(as.character\\(.*\\)\\)", "", .)
-
                 # Build model for each block
                 coefficients <- rbind(
                     coefficients,
@@ -399,12 +393,11 @@ regression_server <- function(
                 # Format t
                 knitr::kable(
                     "html",
-                    align = "c",
+                    align = c("l", rep("c", 5)),
                     row.names = FALSE,
                     col.names = c(
-                        "Variable", "B coeff.", "SE",
-                        "t", "p-value",
-                        "β coeff."
+                        " ", "B coeff.", "SE",
+                        "t", "p-value", "β coeff."
                     )
                 ) %>%
                 kableExtra::kable_classic(
@@ -428,6 +421,68 @@ regression_server <- function(
                         "Dependent (outcome) variable: ",
                         isolate(input$outcome)
                     )
+                )
+        }
+    }
+
+    output$collinearity <- function() {
+        tolvif <- data.frame()
+
+        if (length(models()) > 0) {
+            for (i in 1:length(models())) {
+                if (length(models()[[i]]$coefficients) > 2) {
+                    tolvif <- rbind(tolvif, data.frame(
+                        model = paste0("", i),
+                        Variable =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 1],
+                        Tolerance =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 2],
+                        VIF =
+                            olsrr::ols_coll_diag(models()[[i]])$vif_t[, 3]
+                    ))
+                } else {
+                    tolvif <- rbind(tolvif, data.frame(
+                        model = paste0("", i),
+                        Variable = names(models()[[i]]$coefficients),
+                        Tolerance = 1,
+                        VIF = 1
+                    ) %>% # remove intercept
+                        dplyr::filter(Variable != "(Intercept)"))
+                }
+            }
+
+            print(tolvif)
+
+            # Create a vector of model names and count of variables
+            grouping <- factor(
+                tolvif$model,
+                levels = unique(tolvif$model),
+                labels = paste0("Model ", unique(tolvif$model))
+            )
+
+            # Formatting
+            tolvif %>%
+                # Discard column "model"
+                dplyr::select(-model) %>%
+                # sprintf to specified digits
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    caption = "Tolerance and VIF",
+                    align = "lcc"
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                # Group rows by model number
+                kableExtra::group_rows(
+                    index = table(grouping),
+                    group_label = paste0("Model ", grouping)
                 )
         }
     }
