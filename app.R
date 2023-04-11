@@ -79,6 +79,10 @@ ui <- dashboardPage(
       tabItem(
         tabName = "regression",
         regression_ui("regression")
+      ),
+      tabItem(
+        tabName = "variance",
+        variance_ui("variance")
       )
     )
   ),
