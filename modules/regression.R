@@ -461,6 +461,17 @@ regression_server <- function(
                 }
             }
 
+            # If any VIF is greater than 5, add footnote
+            if (any(tolvif$VIF > 5)) {
+                symbol <- "Severe multicollinearity detected:
+                    VIF > 5 and Tolerance < 0.2"
+                symbol_manual <- c(footnote_marker_symbol(2, "html"))
+            } else {
+                symbol <- ""
+                symbol_manual <- c(" ")
+            }
+
+
             # Create a vector of model names and count of variables
             grouping <- factor(
                 tolvif$model,
@@ -495,11 +506,8 @@ regression_server <- function(
                 ) %>%
                 kableExtra::footnote(
                     symbol_title = "Multicollinearity assumptions checked. ",
-                    symbol = "Severe multicollinearity detected:
-                    VIF > 5 and Tolerance < 0.2",
-                    symbol_manual = c(
-                        footnote_marker_symbol(2, "html")
-                    ),
+                    symbol = symbol,
+                    symbol_manual = symbol_manual
                 )
         }
     }
