@@ -80,7 +80,7 @@ regression_ui <- function(id) {
                     h3("Model Diagnostics"),
                     tableOutput(ns("collinearity")),
                     tableOutput(ns("autocorrelation")),
-                    tableOutput(ns("heteroscedasticity")),
+                    tableOutput(ns("homoscedasticity")),
                     tableOutput(ns("influence")),
                     tableOutput(ns("leverage")),
                     plotOutput(ns("qq_residuals"))
@@ -238,7 +238,7 @@ regression_server <- function(
                             p_value = if (p_value < 0.001) {
                                 "< 0.001"
                             } else {
-                                as.character(round(p_value, digits = digits))
+                                sprintf(paste0("%.", digits, "f"), p_value)
                             },
                             stringsAsFactors = FALSE
                         )
