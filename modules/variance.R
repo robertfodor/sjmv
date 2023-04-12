@@ -9,6 +9,8 @@ library(s20x) # for Levene's test for non-interaction ANOVA
 library(car) # for leveneTest due to centering option
 library(broom) # to clean up aov output
 library(ggplot2)
+library(effectsize)
+options(es.use_symbols = TRUE)
 
 # UI
 variance_ui <- function(id) {
@@ -34,7 +36,7 @@ variance_ui <- function(id) {
                         choices = c(
                             "One-way ANOVA",
                             "Factorial ANOVA without interactions",
-                            "Factorial (Two-way) ANOVA with interactions"
+                            "Factorial ANOVA with interactions"
                         ),
                         selected = "One-way ANOVA",
                         inline = FALSE,
@@ -61,7 +63,7 @@ variance_ui <- function(id) {
                             <p> If your predictors are completely independent
                             of each other, select <b>Factorial ANOVA without
                             interactions</b>. Otherwise, select <b>Factorial
-                            (Two-way) ANOVA with interactions</b>.</p>
+                            ANOVA with interactions</b>.</p>
                             ")
                         )
                     )
@@ -71,23 +73,31 @@ variance_ui <- function(id) {
                 column(
                     width = 12,
                     h3("Assumption checks"),
+                    h4("Homogeneity of variance assumption"),
                     tableOutput(ns("homogeneity")),
                     br(),
                     textOutput(ns("homogeneity_text")),
+                    h4("Normality assumption"),
                     tableOutput(ns("normality")),
                     br(),
                     textOutput(ns("normality_text")),
                     br(),
+                    h4("QQ plot of residuals"),
                     plotOutput(ns("qq_plot")),
                     tableOutput(ns("equality_of_covariances")),
                     tableOutput(ns("sphericity")),
                     h3("Results"),
+                    h4("ANOVA table"),
                     tableOutput(ns("anova_results")),
+                    tableOutput(ns("anova_effect_sizes")),
                     br(),
                     tagAppendAttributes(
                         textOutput(ns("results_text")),
                         style = "white-space: pre-wrap;"
                     ),
+                    h4("Non-parametric tests"),
+                    h5("Kruskal-Wallis rank sum test"),
+                    tableOutput(ns("kruskal_table")),
                     h3("Post-hoc analysis"),
                     tableOutput(ns("post_hoc_comparison"))
                 )
@@ -184,10 +194,26 @@ variance_server <- function(
         if (missing_inputs()) {
             return(NULL)
         } else {
-            return(aov(
-                formula = formula(),
-                data = df()
-            ))
+            if (input$type == "Factorial ANOVA with interactions") {
+                # Create a list of contrasts
+                factorlist <- list()
+                for (i in input$predictors) {
+                    factorlist[[i]] <- "contr.sum"
+                }
+
+                return(
+                    aov(
+                        formula = formula(),
+                        data = df(),
+                        contrasts = factorlist
+                    )
+                )
+            } else {
+                return(aov(
+                    formula = formula(),
+                    data = df()
+                ))
+            }
         }
     })
 
@@ -247,7 +273,7 @@ variance_server <- function(
                 # ) %>%
                 knitr::kable(
                     "html",
-                    caption = "Homogeneity of variance",
+                    # caption = "Homogeneity of variance",
                     align = c("l", rep("c", 4)),
                     escape = FALSE,
                     col.names = c(" ", "F statistic", "df1", "df2", "p-value")
@@ -268,9 +294,7 @@ variance_server <- function(
             if (levene()$p.value[1] < 0.05) {
                 return(paste(
                     "The homogeneity of variance assumption is violated.",
-                    "The variances are not equal, so Welch's ANOVA must to be",
-                    "used instead of Fisher's ANOVA. In the post-hoc analysis,",
-                    "the Games-Howell test must be used instead of Tukey's test."
+                    "The variances are not equal."
                 ))
             } else {
                 return(paste(
@@ -311,7 +335,7 @@ variance_server <- function(
                 ) %>%
                 knitr::kable(
                     "html",
-                    caption = "Normality",
+                    # caption = "Normality",
                     align = c("l", rep("c", ncol(normality) - 1)),
                     escape = FALSE,
                     col.names = c(" ", "W statistic", "p-value"),
@@ -335,7 +359,7 @@ variance_server <- function(
                     "The normality assumption is violated.",
                     "The residuals are not normally distributed,",
                     "so the non-parametric Kruskal-Wallis test",
-                    "should be used instead of one-way ANOVA."
+                    "should be used instead of a parametric one-way ANOVA."
                 ))
             } else {
                 return(paste(
@@ -355,32 +379,93 @@ variance_server <- function(
         }
     })
 
+    # Overall model test
+    overall_model_test <- reactive({
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            return(lm(formula(), data = df()))
+        }
+    })
 
     # ANOVA table
     output$anova_results <- function() {
         if (missing_inputs()) {
             return(NULL)
         } else {
-            as.data.frame(broom::tidy(model())) %>%
-                # dplyr::mutate(
-                #     p.value = if (p.value < 0.001) {
-                #         "< 0.001"
-                #     } else {
-                #         sprintf(paste0("%.", digits, "f"), p.value)
-                #     }
-                # ) %>%
+            model <- data.frame(
+                Term = "Overall model test",
+                SS = sum(
+                    (overall_model_test()$fitted.values - mean(
+                        overall_model_test()$model[[input$outcome]]
+                    ))^2
+                ),
+                Df = summary(overall_model_test())$fstatistic[2],
+                MS = sum(
+                    (overall_model_test()$fitted.values - mean(
+                        overall_model_test()$model[[input$outcome]]
+                    ))^2
+                ) /
+                    summary(overall_model_test())$fstatistic[2],
+                F = summary(overall_model_test())$fstatistic[1],
+                p.value = pf(
+                    summary(overall_model_test())$fstatistic[1],
+                    summary(overall_model_test())$fstatistic[2],
+                    summary(overall_model_test())$fstatistic[3],
+                    lower.tail = FALSE
+                )
+            )
+
+            if (input$type == "Factorial ANOVA with interactions") {
+                # Use car::Anova type 3
+                model_intercept <- as.data.frame(broom::tidy(
+                    car::Anova(model(), type = 3)
+                )) %>%
+                    dplyr::filter(term == "(Intercept)")
+
+                intercept <- data.frame(
+                    Term = "Intercept",
+                    SS = model_intercept[2],
+                    Df = model_intercept[3],
+                    MS = model_intercept[2] / model_intercept[3],
+                    F = model_intercept[4],
+                    p.value = model_intercept[5]
+                )
+
+                colnames(intercept) <- colnames(model)
+
+                model <- rbind(model, intercept)
+            }
+
+            model_nonintercept <- as.data.frame(broom::tidy(model()))
+
+            nonintercept <- data.frame(
+                Term = model_nonintercept[1],
+                SS = model_nonintercept[3],
+                Df = model_nonintercept[2],
+                MS = model_nonintercept[4],
+                F = model_nonintercept[5],
+                p.value = model_nonintercept[6]
+            )
+
+            colnames(nonintercept) <- colnames(model)
+
+            model <- rbind(model, nonintercept)
+
+            model %>%
                 dplyr::mutate_if(
                     is.numeric,
                     ~ sprintf(paste0("%.", digits, "f"), .)
                 ) %>%
                 knitr::kable(
                     "html",
-                    caption = "ANOVA",
+                    # caption = "ANOVA (parametric)",
                     align = c("l", rep("c", 5)),
                     escape = FALSE,
                     col.names = c(
-                        " ", "Df", "Sum of Squares",
-                        "Mean Square", "F", "p-value"
+                        " ", "Sum of Squares", "Df",
+                        "Mean Square",
+                        "F", "p-value"
                     ),
                     row.names = FALSE
                 ) %>%
@@ -390,6 +475,11 @@ variance_server <- function(
                     position = "left"
                 )
         }
+    }
+
+    # ANOVA effect sizes
+    output$anova_effect_sizes <- function() {
+        # For one-way ANOVA, eta squared, for without interaction partial eta squared, and for with interaction omega squared are reported
     }
 
     # Text output
@@ -404,4 +494,101 @@ variance_server <- function(
                 gsub("Effect sizes were labelled.*", "", .)
         }
     })
+
+    # Kruskal-Wallis test for non-parametric data
+    kruskal <- reactive({
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            kruskal <- list()
+            # Run the test for each factor
+            for (i in 1:length(input$predictors)) {
+                kruskal[[i]] <- kruskal.test(
+                    as.formula(paste0(
+                        input$outcome, " ~ ", input$predictors[[i]]
+                    )),
+                    data = df()
+                )
+            }
+            return(kruskal)
+        }
+    })
+
+    # Effect size for Kruskal-Wallis test
+    epsilon2_kw <- reactive({
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            epsilon2_kw <- list()
+            # Run the test for each factor
+            for (i in 1:length(input$predictors)) {
+                epsilon2_kw[[i]] <- effectsize::rank_epsilon_squared(
+                    as.formula(paste0(
+                        input$outcome, " ~ ", input$predictors[[i]]
+                    )),
+                    data = df()
+                )
+            }
+            return(epsilon2_kw)
+        }
+    })
+
+    # Kruksal-Wallis table
+    output$kruskal_table <- function() {
+        kruskal_table <- data.frame()
+        # If kruskal() is not null, then ...
+        if (length(kruskal()) > 0) {
+            for (i in 1:length(kruskal())) {
+                kruskal_table <- rbind(
+                    kruskal_table,
+                    data.frame(
+                        Variable = kruskal()[[i]]$data.name,
+                        Statistic = kruskal()[[i]]$statistic,
+                        df = kruskal()[[i]]$parameter,
+                        p.value = kruskal()[[i]]$p.value,
+                        epsilon2 = epsilon2_kw()[[i]]$rank_epsilon_squared,
+                        epsilon2_ci = paste0(
+                            sprintf(
+                                paste0("%.", digits, "f"),
+                                epsilon2_kw()[[i]]$CI_low
+                            ),
+                            " - ",
+                            sprintf(
+                                paste0("%.", digits, "f"),
+                                epsilon2_kw()[[i]]$CI_high
+                            )
+                        )
+                    )
+                )
+            }
+            kruskal_table %>%
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    # caption = "Kruskal-Wallis rank sum test (non-parametric)",
+                    align = c("l", rep("c", 5)),
+                    escape = FALSE,
+                    col.names = c(
+                        " ", "χ² Statistic", "df", "p-value",
+                        "(ε²)", "95% CI"
+                    ),
+                    row.names = FALSE
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                kableExtra::add_header_above(
+                    c(
+                        " " = 1,
+                        "Kruskal-Wallis rank sum test" = 3,
+                        "Effect size" = 2
+                    )
+                )
+        }
+    }
 }
