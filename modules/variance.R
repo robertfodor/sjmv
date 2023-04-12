@@ -8,6 +8,7 @@ library(report)
 library(s20x) # for Levene's test for non-interaction ANOVA
 library(car) # for leveneTest due to centering option
 library(broom) # to clean up aov output
+library(ggplot2)
 
 # UI
 variance_ui <- function(id) {
@@ -53,14 +54,15 @@ variance_ui <- function(id) {
                         tagList(
                             HTML("<p>If you have one predictor (independent)
                             variable, make sure to select <b>One-way ANOVA</b>.
-                            Independent sample t-tests will also be performed
-                            on each group pair during the post-hoc analysis.
                             </p>
                             <p>If you have at least two predictor variables,
-                            you'll have to select <b>Factorial ANOVA</b>. This
-                            will show overall model test statistics, as well as
-                            effect sizes for each predictor variable.
-                            </p>")
+                            you'll have to select one of the <b>Factorial</b>
+                            ANOVAs.</p>
+                            <p> If your predictors are completely independent
+                            of each other, select <b>Factorial ANOVA without
+                            interactions</b>. Otherwise, select <b>Factorial
+                            (Two-way) ANOVA with interactions</b>.</p>
+                            ")
                         )
                     )
                 )
@@ -75,6 +77,8 @@ variance_ui <- function(id) {
                     tableOutput(ns("normality")),
                     br(),
                     textOutput(ns("normality_text")),
+                    br(),
+                    plotOutput(ns("qq_plot")),
                     tableOutput(ns("equality_of_covariances")),
                     tableOutput(ns("sphericity")),
                     h3("Results"),
@@ -340,6 +344,17 @@ variance_server <- function(
             }
         }
     }
+
+    # QQ of residuals
+    output$qq_plot <- renderPlot({
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            qqnorm(residuals(model()))
+            qqline(residuals(model()))
+        }
+    })
+
 
     # ANOVA table
     output$anova_results <- function() {
