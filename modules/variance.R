@@ -20,7 +20,7 @@ variance_ui <- function(id) {
             fluidRow(
                 column(
                     width = 12,
-                    h2("Variance Analysis")
+                    h1("Variance Analysis"),
                 ),
                 column(
                     width = 6,
@@ -72,25 +72,26 @@ variance_ui <- function(id) {
             fluidRow(
                 column(
                     width = 12,
-                    h3("Assumption checks"),
-                    h4("Homogeneity of variance assumption"),
+                    h2("Assumption checks"),
+                    h3("Homogeneity of variance assumption"),
                     tableOutput(ns("homogeneity")),
                     br(),
-                    textOutput(ns("homogeneity_text")),
-                    h4("Normality assumption"),
+                    htmlOutput(ns("homogeneity_text")),
+                    h3("Normality assumption"),
                     tableOutput(ns("normality")),
                     br(),
-                    textOutput(ns("normality_text")),
+                    htmlOutput(ns("normality_text")),
                     br(),
-                    h4("QQ plot of residuals"),
+                    h3("QQ plot of residuals"),
                     plotOutput(ns("qq_plot")),
                     tableOutput(ns("equality_of_covariances")),
                     tableOutput(ns("sphericity")),
-                    h3("Results"),
-                    h4("ANOVA table"),
+                    h2("Results"),
+                    h3("Fisher's ANOVA (assuming equal variances)"),
+                    h5("ANOVA table for Fisher's ANOVA"),
                     tableOutput(ns("anova_results")),
                     br(),
-                    h4("Effect sizes"),
+                    h5("Effect sizes (Fisher's ANOVA)"),
                     tableOutput(ns("anova_effect_sizes")),
                     br(),
                     box(
@@ -107,10 +108,13 @@ variance_ui <- function(id) {
                             )
                         )
                     ),
-                    h4("Non-parametric tests"),
+                    h3("Welch's ANOVA (assuming unequal variances)"),
+                    h5("ANOVA table for Welch's ANOVA"),
+                    tableOutput(ns("anova_results_welch")),
+                    h3("Non-parametric tests"),
                     h5("Kruskal-Wallis rank sum test"),
                     tableOutput(ns("kruskal_table")),
-                    h3("Post-hoc analysis"),
+                    h2("Post-hoc analysis"),
                     tableOutput(ns("post_hoc_comparison"))
                 )
             )
@@ -306,12 +310,15 @@ variance_server <- function(
         } else {
             if (levene()$p.value[1] < 0.05) {
                 return(paste(
-                    "The homogeneity of variance assumption is violated.",
-                    "The variances are not equal."
+                    "<p>The homogeneity of variance assumption is violated. ",
+                    "We can assume <i>unequal variances</i>.</p>",
+                    "<p><b>Welch's ANOVA</b> recommended.</p>"
                 ))
             } else {
                 return(paste(
-                    "The homogeneity of variance assumption is not violated."
+                    "<p>The homogeneity of variance assumption is not violated. ",
+                    "We can assume <i>equal variances</i>.</p>",
+                    "<p><b>Fisher's ANOVA</b> is acceptable.</p>"
                 ))
             }
         }
@@ -369,14 +376,14 @@ variance_server <- function(
         } else {
             if (shapiro()$p.value < 0.05) {
                 return(paste(
-                    "The normality assumption is violated.",
-                    "The residuals are not normally distributed,",
-                    "so the non-parametric Kruskal-Wallis test",
-                    "should be used instead of a parametric one-way ANOVA."
+                    "<p>The normality assumption is violated.",
+                    "The residuals are not normally distributed.</p>",
+                    "<p><b>Non-parametric tests</b> are recommended ",
+                    "instead of ANOVA (e.g. Kruskal-Wallis test).</p>"
                 ))
             } else {
                 return(paste(
-                    "The normality assumption is not violated."
+                    "<p>The normality assumption is not violated.</p>"
                 ))
             }
         }
@@ -488,6 +495,69 @@ variance_server <- function(
                     html_font = "inherit",
                     position = "left"
                 )
+        }
+    }
+
+    # Welch's ANOVA
+    output$anova_results_welch <- function() {
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            # Use oneway.test (Welch's
+            model <- oneway.test(formula(), data = df(), var.equal = FALSE)
+            effect_eta <- effectsize::eta_squared(model, partial = FALSE, verbose = FALSE)
+            effect_omega <- effectsize::omega_squared(model, partial = FALSE, verbose = FALSE)
+
+            welchanova <- data.frame(
+                Term = "Welch's ANOVA",
+                F = model$statistic,
+                df1 = model$parameter[1],
+                df2 = model$parameter[2],
+                p.value = model$p.value,
+                eta_squared = effect_eta[, 1],
+                eta_squared_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), effect_eta[, 3]),
+                    sprintf(paste0("%.", digits, "f"), effect_eta[, 4]),
+                    sep = "–"
+                ),
+                omega_squared = effect_omega[, 1],
+                omega_squared_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), effect_omega[, 3]),
+                    sprintf(paste0("%.", digits, "f"), effect_omega[, 4]),
+                    sep = "–"
+                )
+            )
+
+            welchanova %>%
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    # caption = "ANOVA (Welch's)",
+                    align = c("l", rep("c", 8)),
+                    col.names = c(
+                        " ", "F", "df1", "df2", "p-value",
+                        "η²", "95% CI", "ω²", "95% CI"
+                    ),
+                    row.names = FALSE
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                kableExtra::add_header_above(c(
+                    " " = 1,
+                    "Overall model test" = 4,
+                    "Eta squared" = 2,
+                    "Omega squared" = 2
+                )) %>%
+                kableExtra::add_header_above(c(
+                    " " = 5,
+                    "Effect size" = 4
+                ))
         }
     }
 
