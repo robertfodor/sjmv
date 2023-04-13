@@ -569,10 +569,15 @@ variance_server <- function(
                         align = c("l", rep("c", 8)),
                         escape = FALSE,
                         col.names = c(
-                            " ", "η²", "CI", " ",
-                            "ω²", "CI", " "
+                            " ", "η²", "95% CI", " ",
+                            "ω²", "95% CI", " "
                         ),
                         row.names = FALSE
+                    ) %>%
+                    kableExtra::kable_classic(
+                        full_width = FALSE,
+                        html_font = "inherit",
+                        position = "left"
                     ) %>%
                     kableExtra::add_header_above(c(
                         " " = 1,
@@ -590,12 +595,17 @@ variance_server <- function(
                         align = c("l", rep("c", 12)),
                         escape = FALSE,
                         col.names = c(
-                            " ", "η²", "CI", " ",
-                            "η²p", "CI", " ",
-                            "ω²", "CI", " ",
-                            "ω²p", "CI", " "
+                            " ", "η²", "95% CI", " ",
+                            "η²p", "95% CI", " ",
+                            "ω²", "95% CI", " ",
+                            "ω²p", "95% CI", " "
                         ),
                         row.names = FALSE
+                    ) %>%
+                    kableExtra::kable_classic(
+                        full_width = FALSE,
+                        html_font = "inherit",
+                        position = "left"
                     ) %>%
                     kableExtra::add_header_above(c(
                         " " = 1,
@@ -607,11 +617,6 @@ variance_server <- function(
             }
 
             return(display_effect_sizes %>%
-                kableExtra::kable_classic(
-                    full_width = FALSE,
-                    html_font = "inherit",
-                    position = "left"
-                ) %>%
                 kableExtra::footnote(
                     general_title = "Note on interpretation:",
                     general = paste(
