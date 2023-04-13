@@ -8,9 +8,7 @@ library(report)
 library(s20x) # for Levene's test for non-interaction ANOVA
 library(car) # for leveneTest due to centering option
 library(broom) # to clean up aov output
-library(ggplot2)
 library(effectsize)
-options(es.use_symbols = TRUE)
 
 # UI
 variance_ui <- function(id) {
@@ -72,6 +70,7 @@ variance_ui <- function(id) {
             fluidRow(
                 column(
                     width = 12,
+                    plotOutput(ns("boxplot")),
                     h2("Assumption checks"),
                     h3("Homogeneity of variance assumption"),
                     tableOutput(ns("homogeneity")),
@@ -81,9 +80,6 @@ variance_ui <- function(id) {
                     tableOutput(ns("normality")),
                     br(),
                     htmlOutput(ns("normality_text")),
-                    br(),
-                    h3("QQ plot of residuals"),
-                    plotOutput(ns("qq_plot")),
                     tableOutput(ns("equality_of_covariances")),
                     tableOutput(ns("sphericity")),
                     h2("Results"),
@@ -95,7 +91,7 @@ variance_ui <- function(id) {
                     tableOutput(ns("anova_effect_sizes")),
                     br(),
                     box(
-                        title = "Interpretation of ANOVA results",
+                        title = "Interpretation of Fisher's ANOVA results",
                         status = "success",
                         solidHeader = TRUE,
                         collapsible = TRUE,
@@ -389,15 +385,50 @@ variance_server <- function(
         }
     }
 
-    # QQ of residuals
-    output$qq_plot <- renderPlot({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            qqnorm(residuals(model()))
-            qqline(residuals(model()))
-        }
-    })
+    # Boxplot and QQ plot
+    output$boxplot <- renderPlot(
+        {
+            if (missing_inputs()) {
+                return(NULL)
+            } else {
+                # Use layout
+                layout(
+                    matrix(seq.int(1, length(input$predictors) * 2),
+                        ncol = 2, byrow = TRUE
+                    )
+                )
+
+                # Plots
+                for (i in 1:length(input$predictors)) {
+                    formula <- as.formula(paste(
+                        input$outcome,
+                        "~",
+                        input$predictors[i]
+                    ))
+
+                    par(cex.axis = 0.8, cex.lab = 0.8, cex.main = 0.8)
+
+                    boxplot(
+                        formula = formula,
+                        data = df(),
+                        xlab = input$predictors[i],
+                        ylab = input$outcome,
+                        main = paste0("Boxplot: ", input$outcome, " by ", input$predictors[i])
+                    )
+
+                    # QQ plot of residuals
+                    qqnorm(
+                        residuals(lm(formula = formula, data = df())),
+                        main = paste0("QQ plot of residuals")
+                    )
+                    qqline(
+                        residuals(lm(formula = formula, data = df()))
+                    )
+                }
+            }
+        },
+        res = 100
+    )
 
     # Overall model test
     overall_model_test <- reactive({
