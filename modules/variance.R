@@ -89,11 +89,37 @@ variance_ui <- function(id) {
                     h3("Results"),
                     h4("ANOVA table"),
                     tableOutput(ns("anova_results")),
+                    br(),
+                    box(
+                        title = "Interpretation of ANOVA results",
+                        status = "success",
+                        solidHeader = TRUE,
+                        collapsible = TRUE,
+                        collapsed = FALSE,
+                        width = "100%",
+                        tagList(
+                            tagAppendAttributes(
+                                textOutput(ns("results_text")),
+                                style = "white-space: pre-wrap;"
+                            )
+                        )
+                    ),
+                    h4("Effect sizes"),
                     tableOutput(ns("anova_effect_sizes")),
                     br(),
-                    tagAppendAttributes(
-                        textOutput(ns("results_text")),
-                        style = "white-space: pre-wrap;"
+                    box(
+                        title = "Interpretation of effect sizes",
+                        status = "success",
+                        solidHeader = TRUE,
+                        collapsible = TRUE,
+                        collapsed = FALSE,
+                        width = "100%",
+                        tagList(
+                            tagAppendAttributes(
+                                textOutput(ns("effects_results_text")),
+                                style = "white-space: pre-wrap;"
+                            )
+                        )
                     ),
                     h4("Non-parametric tests"),
                     h5("Kruskal-Wallis rank sum test"),
@@ -420,11 +446,11 @@ variance_server <- function(
                 # Use car::Anova type 3
                 model_intercept <- as.data.frame(broom::tidy(
                     car::Anova(model(), type = 3)
-                )) %>%
-                    dplyr::filter(term == "(Intercept)")
+                ))
 
+                # It's not only the intercept but all Type III terms
                 intercept <- data.frame(
-                    Term = "Intercept",
+                    Term = model_intercept[1],
                     SS = model_intercept[2],
                     Df = model_intercept[3],
                     MS = model_intercept[2] / model_intercept[3],
@@ -435,22 +461,23 @@ variance_server <- function(
                 colnames(intercept) <- colnames(model)
 
                 model <- rbind(model, intercept)
+            } else {
+                # If Type III is not needed, let's use default aov model
+                model_nonintercept <- as.data.frame(broom::tidy(model()))
+
+                nonintercept <- data.frame(
+                    Term = model_nonintercept[1],
+                    SS = model_nonintercept[3],
+                    Df = model_nonintercept[2],
+                    MS = model_nonintercept[4],
+                    F = model_nonintercept[5],
+                    p.value = model_nonintercept[6]
+                )
+
+                colnames(nonintercept) <- colnames(model)
+
+                model <- rbind(model, nonintercept)
             }
-
-            model_nonintercept <- as.data.frame(broom::tidy(model()))
-
-            nonintercept <- data.frame(
-                Term = model_nonintercept[1],
-                SS = model_nonintercept[3],
-                Df = model_nonintercept[2],
-                MS = model_nonintercept[4],
-                F = model_nonintercept[5],
-                p.value = model_nonintercept[6]
-            )
-
-            colnames(nonintercept) <- colnames(model)
-
-            model <- rbind(model, nonintercept)
 
             model %>%
                 dplyr::mutate_if(
@@ -479,7 +506,112 @@ variance_server <- function(
 
     # ANOVA effect sizes
     output$anova_effect_sizes <- function() {
-        # For one-way ANOVA, eta squared, for without interaction partial eta squared, and for with interaction omega squared are reported
+        if (missing_inputs()) {
+            return(NULL)
+        } else {
+            # Show eta squared, partial eta squared, and omega squared
+            eta_sq <- as.data.frame(effectsize::eta_squared(
+                model(),
+                partial = FALSE, verbose = FALSE
+            ))
+            partial_eta_sq <- as.data.frame(effectsize::eta_squared(
+                model(),
+                partial = TRUE, verbose = FALSE
+            ))
+            omega_sq <- as.data.frame(effectsize::omega_squared(
+                model(),
+                partial = FALSE, verbose = FALSE
+            ))
+            partial_omega_sq <- as.data.frame(effectsize::omega_squared(
+                model(),
+                partial = TRUE, verbose = FALSE
+            ))
+
+            # Combine the effect sizes into a data frame
+            effect_sizes <- data.frame(
+                Term = eta_sq[1],
+                Eta2 = eta_sq[2],
+                Eta2_CI_lo = eta_sq[4],
+                Eta2_CI_hi = eta_sq[5],
+                Eta2p = partial_eta_sq[2],
+                Eta2p_CI_lo = partial_eta_sq[4],
+                Eta2p_CI_hi = partial_eta_sq[5],
+                Omega2 = omega_sq[2],
+                Omega2_CI_lo = omega_sq[4],
+                Omega2_CI_hi = omega_sq[5],
+                Omega2p = partial_omega_sq[2],
+                Omega2p_CI_lo = partial_omega_sq[4],
+                Omega2p_CI_hi = partial_omega_sq[5]
+            )
+
+            colnames(effect_sizes) <- c(
+                "Term", "Eta2", "Eta2_CI_lo", "Eta2_CI_hi",
+                "Eta2p", "Eta2p_CI_lo", "Eta2p_CI_hi",
+                "Omega2", "Omega2_CI_lo", "Omega2_CI_hi",
+                "Omega2p", "Omega2p_CI_lo", "Omega2p_CI_hi"
+            )
+
+            # Return the data frame
+            if (length(input$predictors) < 2) {
+                display_effect_sizes <- effect_sizes[c(
+                    "Term", "Eta2", "Eta2_CI_lo", "Eta2_CI_hi",
+                    "Omega2", "Omega2_CI_lo", "Omega2_CI_hi"
+                )] %>%
+                    dplyr::mutate_if(
+                        is.numeric,
+                        ~ sprintf(paste0("%.", digits, "f"), .)
+                    ) %>%
+                    knitr::kable(
+                        "html",
+                        align = c("l", rep("c", 8)),
+                        escape = FALSE,
+                        col.names = c(
+                            " ", "η²", "CI lower", "CI higher",
+                            "ω²", "CI lower", "CI higher"
+                        ),
+                        row.names = FALSE
+                    ) %>%
+                    kableExtra::add_header_above(c(
+                        " " = 1,
+                        "Eta squared" = 3,
+                        "Omega squared" = 3
+                    ))
+            } else {
+                display_effect_sizes <- effect_sizes %>%
+                    dplyr::mutate_if(
+                        is.numeric,
+                        ~ sprintf(paste0("%.", digits, "f"), .)
+                    ) %>%
+                    knitr::kable(
+                        "html",
+                        align = c("l", rep("c", 12)),
+                        escape = FALSE,
+                        col.names = c(
+                            " ", "η²", "CI lower", "CI higher",
+                            "η²p", "CI lower", "CI higher",
+                            "ω²", "CI lower", "CI higher",
+                            "ω²p", "CI lower", "CI higher"
+                        ),
+                        row.names = FALSE
+                    ) %>%
+                    kableExtra::add_header_above(c(
+                        " " = 1,
+                        "Eta squared" = 3,
+                        "Partial eta sq." = 3,
+                        "Omega squared" = 3,
+                        "Partial omega sq." = 3
+                    ))
+            }
+
+
+
+            return(display_effect_sizes %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ))
+        }
     }
 
     # Text output
@@ -526,7 +658,8 @@ variance_server <- function(
                     as.formula(paste0(
                         input$outcome, " ~ ", input$predictors[[i]]
                     )),
-                    data = df()
+                    data = df(),
+                    verbose = FALSE
                 )
             }
             return(epsilon2_kw)
