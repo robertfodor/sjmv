@@ -252,7 +252,8 @@ variance_server <- function(
                 test <- s20x::levene.test(
                     formula(),
                     data = df(),
-                    digit = digits
+                    digit = digits,
+                    show.table = FALSE
                 )
 
                 return(data.frame(
