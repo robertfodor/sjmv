@@ -518,16 +518,32 @@ variance_server <- function(
             effect_sizes <- data.frame(
                 Term = eta_sq[1],
                 Eta2 = eta_sq[2],
-                Eta2_CI = 0,
+                Eta2_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), eta_sq[, 4]),
+                    sprintf(paste0("%.", digits, "f"), eta_sq[, 5]),
+                    sep = "–"
+                ),
                 Eta2_interp = effectsize::interpret(eta_sq, rules = "field2013")[6],
                 Eta2p = partial_eta_sq[2],
-                Eta2p_CI = 0,
+                Eta2p_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 4]),
+                    sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 5]),
+                    sep = "–"
+                ),
                 Eta2p_interp = effectsize::interpret(partial_eta_sq, rules = "field2013")[6],
                 Omega2 = omega_sq[2],
-                Omega2_CI = 0,
+                Omega2_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), omega_sq[, 4]),
+                    sprintf(paste0("%.", digits, "f"), omega_sq[, 5]),
+                    sep = "–"
+                ),
                 Omega2_interp = effectsize::interpret(omega_sq, rules = "field2013")[6],
                 Omega2p = partial_omega_sq[2],
-                Omega2p_CI = 0,
+                Omega2p_CI = paste(
+                    sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 4]),
+                    sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 5]),
+                    sep = "–"
+                ),
                 Omega2p_interp = effectsize::interpret(partial_omega_sq, rules = "field2013")[6]
             )
 
