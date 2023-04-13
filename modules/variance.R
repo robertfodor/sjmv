@@ -90,6 +90,9 @@ variance_ui <- function(id) {
                     h4("ANOVA table"),
                     tableOutput(ns("anova_results")),
                     br(),
+                    h4("Effect sizes"),
+                    tableOutput(ns("anova_effect_sizes")),
+                    br(),
                     box(
                         title = "Interpretation of ANOVA results",
                         status = "success",
@@ -100,23 +103,6 @@ variance_ui <- function(id) {
                         tagList(
                             tagAppendAttributes(
                                 textOutput(ns("results_text")),
-                                style = "white-space: pre-wrap;"
-                            )
-                        )
-                    ),
-                    h4("Effect sizes"),
-                    tableOutput(ns("anova_effect_sizes")),
-                    br(),
-                    box(
-                        title = "Interpretation of effect sizes",
-                        status = "success",
-                        solidHeader = TRUE,
-                        collapsible = TRUE,
-                        collapsed = FALSE,
-                        width = "100%",
-                        tagList(
-                            tagAppendAttributes(
-                                textOutput(ns("effects_results_text")),
                                 style = "white-space: pre-wrap;"
                             )
                         )
@@ -511,52 +497,52 @@ variance_server <- function(
             return(NULL)
         } else {
             # Show eta squared, partial eta squared, and omega squared
-            eta_sq <- as.data.frame(effectsize::eta_squared(
+            eta_sq <- effectsize::eta_squared(
                 model(),
                 partial = FALSE, verbose = FALSE
-            ))
-            partial_eta_sq <- as.data.frame(effectsize::eta_squared(
+            )
+            partial_eta_sq <- effectsize::eta_squared(
                 model(),
                 partial = TRUE, verbose = FALSE
-            ))
-            omega_sq <- as.data.frame(effectsize::omega_squared(
+            )
+            omega_sq <- effectsize::omega_squared(
                 model(),
                 partial = FALSE, verbose = FALSE
-            ))
-            partial_omega_sq <- as.data.frame(effectsize::omega_squared(
+            )
+            partial_omega_sq <- effectsize::omega_squared(
                 model(),
                 partial = TRUE, verbose = FALSE
-            ))
+            )
 
             # Combine the effect sizes into a data frame
             effect_sizes <- data.frame(
                 Term = eta_sq[1],
                 Eta2 = eta_sq[2],
-                Eta2_CI_lo = eta_sq[4],
-                Eta2_CI_hi = eta_sq[5],
+                Eta2_CI = 0,
+                Eta2_interp = effectsize::interpret(eta_sq, rules = "field2013")[6],
                 Eta2p = partial_eta_sq[2],
-                Eta2p_CI_lo = partial_eta_sq[4],
-                Eta2p_CI_hi = partial_eta_sq[5],
+                Eta2p_CI = 0,
+                Eta2p_interp = effectsize::interpret(partial_eta_sq, rules = "field2013")[6],
                 Omega2 = omega_sq[2],
-                Omega2_CI_lo = omega_sq[4],
-                Omega2_CI_hi = omega_sq[5],
+                Omega2_CI = 0,
+                Omega2_interp = effectsize::interpret(omega_sq, rules = "field2013")[6],
                 Omega2p = partial_omega_sq[2],
-                Omega2p_CI_lo = partial_omega_sq[4],
-                Omega2p_CI_hi = partial_omega_sq[5]
+                Omega2p_CI = 0,
+                Omega2p_interp = effectsize::interpret(partial_omega_sq, rules = "field2013")[6]
             )
 
             colnames(effect_sizes) <- c(
-                "Term", "Eta2", "Eta2_CI_lo", "Eta2_CI_hi",
-                "Eta2p", "Eta2p_CI_lo", "Eta2p_CI_hi",
-                "Omega2", "Omega2_CI_lo", "Omega2_CI_hi",
-                "Omega2p", "Omega2p_CI_lo", "Omega2p_CI_hi"
+                "Term", "Eta2", "Eta2_CI", "Eta2_interp",
+                "Eta2p", "Eta2p_CI", "Eta2p_interp",
+                "Omega2", "Omega2_CI", "Omega2_interp",
+                "Omega2p", "Omega2p_CI", "Omega2p_interp"
             )
 
             # Return the data frame
             if (length(input$predictors) < 2) {
                 display_effect_sizes <- effect_sizes[c(
-                    "Term", "Eta2", "Eta2_CI_lo", "Eta2_CI_hi",
-                    "Omega2", "Omega2_CI_lo", "Omega2_CI_hi"
+                    "Term", "Eta2", "Eta2_CI", "Eta2_interp",
+                    "Omega2", "Omega2_CI", "Omega2_interp"
                 )] %>%
                     dplyr::mutate_if(
                         is.numeric,
@@ -567,8 +553,8 @@ variance_server <- function(
                         align = c("l", rep("c", 8)),
                         escape = FALSE,
                         col.names = c(
-                            " ", "η²", "CI lower", "CI higher",
-                            "ω²", "CI lower", "CI higher"
+                            " ", "η²", "CI", " ",
+                            "ω²", "CI", " "
                         ),
                         row.names = FALSE
                     ) %>%
@@ -588,10 +574,10 @@ variance_server <- function(
                         align = c("l", rep("c", 12)),
                         escape = FALSE,
                         col.names = c(
-                            " ", "η²", "CI lower", "CI higher",
-                            "η²p", "CI lower", "CI higher",
-                            "ω²", "CI lower", "CI higher",
-                            "ω²p", "CI lower", "CI higher"
+                            " ", "η²", "CI", " ",
+                            "η²p", "CI", " ",
+                            "ω²", "CI", " ",
+                            "ω²p", "CI", " "
                         ),
                         row.names = FALSE
                     ) %>%
@@ -604,13 +590,19 @@ variance_server <- function(
                     ))
             }
 
-
-
             return(display_effect_sizes %>%
                 kableExtra::kable_classic(
                     full_width = FALSE,
                     html_font = "inherit",
                     position = "left"
+                ) %>%
+                kableExtra::footnote(
+                    general_title = "Note on interpretation:",
+                    general = paste(
+                        "Effect size interpretation follows Field (2013). <br>",
+                        "Other researchers follow Cohen's (1992) recommendations."
+                    ),
+                    escape = FALSE
                 ))
         }
     }
@@ -622,9 +614,7 @@ variance_server <- function(
         } else {
             report::report_text(model()) %>%
                 # replace "Eta2" with html eta symbol and squared symbol
-                gsub("Eta2", "\u03B7\u00B2", .) %>%
-                # remove the row starting with "Effect sizes were labelled"
-                gsub("Effect sizes were labelled.*", "", .)
+                gsub("Eta2", "\u03B7\u00B2", .)
         }
     })
 
