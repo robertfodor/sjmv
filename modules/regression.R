@@ -80,7 +80,7 @@ regression_ui <- function(id) {
                     h3("Model Diagnostics"),
                     tableOutput(ns("collinearity")),
                     tableOutput(ns("autocorrelation")),
-                    tableOutput(ns("heteroscedasticity")),
+                    tableOutput(ns("homoscedasticity")),
                     tableOutput(ns("influence")),
                     tableOutput(ns("leverage")),
                     plotOutput(ns("qq_residuals"))
@@ -238,7 +238,7 @@ regression_server <- function(
                             p_value = if (p_value < 0.001) {
                                 "< 0.001"
                             } else {
-                                as.character(round(p_value, digits = digits))
+                                sprintf(paste0("%.", digits, "f"), p_value)
                             },
                             stringsAsFactors = FALSE
                         )
@@ -461,6 +461,17 @@ regression_server <- function(
                 }
             }
 
+            # If any VIF is greater than 5, add footnote
+            if (any(tolvif$VIF > 5)) {
+                symbol <- "Severe multicollinearity detected:
+                    VIF > 5 and Tolerance < 0.2"
+                symbol_manual <- c(footnote_marker_symbol(2, "html"))
+            } else {
+                symbol <- ""
+                symbol_manual <- c(" ")
+            }
+
+
             # Create a vector of model names and count of variables
             grouping <- factor(
                 tolvif$model,
@@ -495,11 +506,8 @@ regression_server <- function(
                 ) %>%
                 kableExtra::footnote(
                     symbol_title = "Multicollinearity assumptions checked. ",
-                    symbol = "Severe multicollinearity detected:
-                    VIF > 5 and Tolerance < 0.2",
-                    symbol_manual = c(
-                        footnote_marker_symbol(2, "html")
-                    ),
+                    symbol = symbol,
+                    symbol_manual = symbol_manual
                 )
         }
     }

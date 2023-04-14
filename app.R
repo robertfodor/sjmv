@@ -11,6 +11,7 @@ library(shinyWidgets)
 source("modules/getting_started.R") # Welcome and data import
 source("modules/descriptive.R") # Descriptive statistics
 source("modules/regression.R") # Regression analysis
+source("modules/variance.R") # Variance analysis
 
 # Define UI for application
 ui <- dashboardPage(
@@ -28,13 +29,18 @@ ui <- dashboardPage(
       ),
       menuItem(
         text = "Descriptive Statistics",
-        icon = icon(name = "bar-chart"),
+        icon = icon(name = "table"),
         tabName = "descriptive"
       ),
       menuItem(
         text = "Regression Analysis",
         icon = icon(name = "line-chart"),
         tabName = "regression"
+      ),
+      menuItem(
+        text = "Variance Analysis",
+        icon = icon(name = "bar-chart"),
+        tabName = "variance"
       ),
       menuItem(
         text = "About",
@@ -73,6 +79,10 @@ ui <- dashboardPage(
       tabItem(
         tabName = "regression",
         regression_ui("regression")
+      ),
+      tabItem(
+        tabName = "variance",
+        variance_ui("variance")
       )
     )
   ),
@@ -126,6 +136,18 @@ server <- function(input, output, session) {
     if (substr(input$tabs, 1, 5) == "regre") {
       callModule(
         module = regression_server,
+        id = input$tabs,
+        file_input = file_input,
+        digits = input$digits
+      )
+    }
+  )
+
+  #  Output: Variance analysis
+  observe(
+    if (substr(input$tabs, 1, 5) == "varia") {
+      callModule(
+        module = variance_server,
         id = input$tabs,
         file_input = file_input,
         digits = input$digits
