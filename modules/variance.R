@@ -878,9 +878,13 @@ variance_server <- function(
     # Tukey's HSD test
     output$tukey_hsd_table <- function() {
         # Based on the selected post-hoc terms, run Tukey's HSD test
-        if (input$posthoc_terms == "") {
+        if (
+            missing_inputs() ||
+                length(input$posthoc_terms) < 1
+        ) {
             return(NULL)
         } else {
+            req(input$posthoc_terms)
             tukey <- as.data.frame(TukeyHSD(model(),
                 which = input$posthoc_terms
             )[[1]]) %>%
