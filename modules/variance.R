@@ -111,7 +111,13 @@ variance_ui <- function(id) {
                     h5("Kruskal-Wallis rank sum test"),
                     tableOutput(ns("kruskal_table")),
                     h2("Post-hoc analysis"),
-                    tableOutput(ns("post_hoc_comparison"))
+                    pickerInput(
+                        inputId = ns("posthoc_terms"),
+                        label = "Select predictor for post-hoc test:",
+                        multiple = FALSE,
+                        choices = NULL
+                    ),
+                    tableOutput(ns("tukey_hsd_table"))
                 )
             )
         )
@@ -540,7 +546,7 @@ variance_server <- function(
             effect_omega <- effectsize::omega_squared(model, partial = FALSE, verbose = FALSE)
 
             welchanova <- data.frame(
-                Term = "Welch's ANOVA",
+                Term = "Overall model",
                 F = model$statistic,
                 df1 = model$parameter[1],
                 df2 = model$parameter[2],
@@ -581,7 +587,7 @@ variance_server <- function(
                 ) %>%
                 kableExtra::add_header_above(c(
                     " " = 1,
-                    "Overall model test" = 4,
+                    "Welch's ANOVA" = 4,
                     "Eta squared" = 2,
                     "Omega squared" = 2
                 )) %>%
@@ -833,6 +839,131 @@ variance_server <- function(
                         " " = 1,
                         "Kruskal-Wallis rank sum test" = 3,
                         "Effect size" = 2
+                    )
+                )
+        }
+    }
+
+    # Which post-hoc terms to display
+    observeEvent(input$predictors, {
+        # Generate a list of selected predictors and their interaction terms
+        #  First, unlist all the predictors
+        selected_terms <- unlist(input$predictors)
+        #  Generate all interaction terms interactions are selected
+        if (length(input$predictors) > 1 &&
+            input$type == "Factorial ANOVA with interactions") {
+            selected_terms <- c(selected_terms, paste0(
+                selected_terms,
+                collapse = ":"
+            ))
+        }
+
+        updatePickerInput(
+            session,
+            "posthoc_terms",
+            choices = selected_terms,
+            selected = selected_terms[1]
+        )
+    })
+
+
+    # Tukey's HSD test
+    output$tukey_hsd_table <- function() {
+        # Based on the selected post-hoc terms, run Tukey's HSD test
+        if (input$posthoc_terms == "") {
+            return(NULL)
+        } else {
+            tukey <- as.data.frame(TukeyHSD(model(),
+                which = input$posthoc_terms
+            )[[1]]) %>%
+                tibble::rownames_to_column(var = "terms")
+
+            # Split terms into groups by – first using unnest
+            tukey <- tukey %>%
+                tidyr::separate(
+                    terms,
+                    c("group1", "group2"),
+                    sep = "-"
+                ) %>%
+                tidyr::unnest(cols = c(group1, group2))
+
+            # If there are interactions, split the groups into their components
+            if (grepl(":", tukey$group1[1])) {
+                tukey <- tukey %>%
+                    tidyr::separate(
+                        group1,
+                        c("term1a", "term2a"),
+                        sep = ":"
+                    ) %>%
+                    tidyr::separate(
+                        group2,
+                        c("term1b", "term2b"),
+                        sep = ":"
+                    ) %>%
+                    tidyr::unnest(cols = c(term1a, term2a, term1b, term2b))
+            }
+
+            # Re-order columns based on their values and rename
+            if ("term1a" %in% names(tukey)) {
+                # Arrange data
+                tukey <- tukey %>%
+                    dplyr::arrange(term1a, term2a)
+            } else {
+                tukey <- tukey %>%
+                    dplyr::arrange(group1, group2)
+            }
+
+            # Split the input$posthoc_terms into two at the first :
+            term_names <- unlist(strsplit(input$posthoc_terms, ":"))
+
+            # Create col_names for the overall table
+            #  If group1 exists, use term_names[1] for both group1 and group2
+            if ("group1" %in% names(tukey)) {
+                col_names <- c(
+                    term_names[1],
+                    term_names[1]
+                )
+                compa <- 2
+            } else {
+                col_names <- c(
+                    term_names[1],
+                    term_names[2],
+                    term_names[1],
+                    term_names[2]
+                )
+                compa <- 4
+            }
+
+            col_names <- c(
+                col_names,
+                "Mean Difference",
+                "Lower Bound",
+                "Upper Bound",
+                "p-value"
+            )
+
+            tukey %>%
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    caption = "Tukey's HSD test (equal variances assumed)",
+                    align = c("l", rep("c", 5)),
+                    escape = FALSE,
+                    row.names = FALSE,
+                    col.names = col_names
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                kableExtra::add_header_above(
+                    c(
+                        "Comparison" = compa,
+                        " " = 4
                     )
                 )
         }
