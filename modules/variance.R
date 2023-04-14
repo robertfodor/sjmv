@@ -177,6 +177,14 @@ variance_server <- function(
             file_input$df %>%
                 select(input$outcome, unlist(input$predictors))
         )
+
+        for (i in 1:length(sjlabelled::get_labels(df, attr.only = TRUE, values = "p"))) {
+            if (length(sjlabelled::get_labels(df, attr.only = TRUE, values = "p")[[i]]) > 0) {
+                # Overwrite data with labels
+                df[[i]] <- sjlabelled::get_labels(df, attr.only = TRUE, values = "p")[[i]][df[[i]]]
+            }
+        }
+
         return(df)
     })
 
