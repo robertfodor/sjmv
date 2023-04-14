@@ -52,7 +52,20 @@ getting_started_server <- function(input, output, session) {
     # Check if input$file is loaded, then run import
     if (!is.null(input$file)) {
       if (endsWith(input$file$datapath, ".sav")) {
-        df <- sjlabelled::read_spss(input$file$datapath, drop.labels = FALSE)
+        df <- sjlabelled::read_spss(input$file$datapath, convert.factors = FALSE)
+        # Atomic to factors manual conversion method
+        #   Source: R/read.R in sjlabelled package
+        df <- as.data.frame(lapply(df, function(x) {
+          labs <- attr(x, "labels", exact = TRUE)
+          lab <- attr(x, "label", exact = TRUE)
+          if (is.atomic(x) && !is.null(labs) && length(labs) >= length(unique(stats::na.omit(x)))) {
+            x <- as.factor(x)
+            attr(x, "labels") <- labs
+            if (!is.null(lab)) attr(x, "label") <- lab
+          }
+          x
+        }), stringsAsFactors = FALSE)
+
         datafile$type <- "SPSS"
       } else if (endsWith(input$file$datapath, ".omv")) {
         df <- jmvReadWrite::read_omv(input$file$datapath)
