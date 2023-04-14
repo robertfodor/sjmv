@@ -125,7 +125,8 @@ getting_started_server <- function(input, output, session) {
   # Render the warning box
   output$warning_box <- renderUI({
     if (!is.null(input$file) &&
-      length(which(sapply(datafile$df, is.factor))) > 0) {
+      # There is at least one factor variable
+      any(sapply(datafile$df, is.factor))) {
       list(
         br(),
         box(
