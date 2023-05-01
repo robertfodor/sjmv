@@ -226,10 +226,25 @@ descriptive_server <- function(
   # Table outputs for descriptive statistics
   output$descriptives <- function() { # If at least one variable is selected
     if (length(input$var) > 0) {
-      # Filter the table based on the checkboxes using dplyr
-      header_above_ct <- c("Central tendency" = length(input$central_tendency))
-      header_above_dp <- c("Dispersion" = length(input$dispersion))
-      header_above_sk <- c("Skewness and kurtosis" = length(input$skewness_kurtosis))
+      header_above_descr <- c(" " = 1)
+      if (length(input$central_tendency) > 0) {
+        header_above_descr <- c(
+          header_above_descr,
+          "Central tendency" = length(input$central_tendency)
+        )
+      }
+      if (length(input$dispersion) > 0) {
+        header_above_descr <- c(
+          header_above_descr,
+          "Dispersion" = length(input$dispersion)
+        )
+      }
+      if (length(input$skewness_kurtosis) > 0) {
+        header_above_descr <- c(
+          header_above_descr,
+          "Skewness and kurtosis" = length(input$skewness_kurtosis)
+        )
+      }
 
       statistics()$descr %>%
         select(all_of(
@@ -247,9 +262,7 @@ descriptive_server <- function(
           html_font = "inherit",
           position = "left"
         ) %>%
-        kableExtra::add_header_above(
-          c(" " = 1, header_above_ct, header_above_dp, header_above_sk)
-        )
+        kableExtra::add_header_above(header_above_descr)
     }
   }
 
