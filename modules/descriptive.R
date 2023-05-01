@@ -3,6 +3,7 @@
 library(shiny)
 library(dplyr) # for data manipulation
 library(ggplot2) # for plotting
+library(DescTools) # statistics
 library(e1071) # skewness and kurtosis
 library(nortest) # Lilliefors test
 library(shinyWidgets) # for custom widgets
@@ -51,10 +52,7 @@ descriptive_ui <- function(id) {
               "SD", "Var", "Range", "IQR", "Min", "Max"
             ),
             selected = c("SD", "IQR")
-          )
-        ),
-        column(
-          width = 4,
+          ),
           awesomeCheckboxGroup(
             inputId = ns("normality"),
             label = "Normality",
@@ -64,6 +62,16 @@ descriptive_ui <- function(id) {
             ),
             selected = c("Shapiro-Wilk")
           )
+        ),
+        column(
+          width = 4,
+          materialSwitch(
+            inputId = ns("use_bootstrap"),
+            label = "Perform bootstrapping",
+            value = FALSE,
+            status = "info"
+          ),
+          uiOutput(ns("bootstrap_sample_size"))
         )
       ),
       fluidRow(
@@ -94,6 +102,25 @@ descriptive_server <- function(
       )
     }
   )
+
+  # If use_bootstrap is checked, show the sample size input
+  observeEvent(input$use_bootstrap, {
+    if (input$use_bootstrap) {
+      output$bootstrap_sample_size <- renderUI({
+        numericInput(
+          inputId = "bootstrap_sample_size",
+          label = "Sample size:",
+          value = 1000,
+          min = 25,
+          max = 1000000
+        )
+      })
+    } else {
+      output$bootstrap_sample_size <- renderUI({
+        NULL
+      })
+    }
+  })
 
   # Workaround so digits do get updated
   ##   Should fix with a more elegant solution later
