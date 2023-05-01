@@ -19,3 +19,19 @@ I would like to give a nod to jamovi and SPSS, as I studied their outputs and us
 ## Contact
 
 If you have any questions or feedback, please feel open an issue.
+
+## Known bugs
+
+### Variance analysis:
+
+- Global digit change not reflecting in the tables.
+- Plot gets squished if more variables are selected.
+
+## Missing features (to be implemented):
+
+- Outlier detection
+- Correlation matrix (zero-order, partial)
+- Repeated measures ANOVA
+- Exploratory and confirmatory factor analysis
+- Cluster analysis
+- Q method analysis
