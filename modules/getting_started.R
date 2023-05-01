@@ -2,6 +2,7 @@
 #   It passes on the uploaded data to the descriptive module
 library(shiny)
 library(shinydashboard)
+library(haven) # needed for sjlabelled to work on shinyapps.io
 library(sjlabelled) # for labelled SPSS data
 library(jmvReadWrite) # for jamovi import
 library(DT) # for data tables
@@ -14,11 +15,9 @@ getting_started_ui <- function(id) {
       fluidRow(
         column(
           width = 12,
-          h1("Welcome to ShinyStat"),
-          h2("A Shiny app for statistical analysis"),
-          p("This app is designed to help you perform statistical analysis on your data. It is a work in progress, so please let me know if you have any suggestions for improvements."),
+          h2("Welcome to ShinyStat"),
           h3("Get started"),
-          p("To get started, please upload your data file. The app currently supports SPSS (.sav), jamovi (.omv) and CSV files with first rows as header. If you have a different file type, please let me know and I will try to add support for it."),
+          p("To get started, please upload your data file. The app currently supports SPSS (.sav), jamovi (.omv) and CSV files with first rows as header."),
           fileInput(
             inputId = ns("file"),
             label = "Choose a file",
