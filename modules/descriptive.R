@@ -2,6 +2,7 @@
 # It takes as input the datafile uploaded in the Getting Started tab.
 library(shiny)
 library(dplyr) # for data manipulation
+library(stringr) # for string manipulation
 library(boot) # for bootstrapping
 library(ggplot2) # for plotting
 library(e1071) # skewness and kurtosis type 2
@@ -69,7 +70,8 @@ descriptive_ui <- function(id) {
                     width = 12,
                     h4("Results"),
                     tableOutput(ns("descriptives")),
-                    tableOutput(ns("normality_table"))
+                    plotOutput(ns("histogram")),
+                    plotOutput(ns("qqplot"))
                 )
             )
         )
@@ -242,6 +244,7 @@ descriptive_ui <- function(id) {
 
 
 #  Helper functions
+##   Creates enumerated names to put into header
 count_unique_names <- function(name_list) {
     # Initialize an empty list to store the counts
     counts <- list()
@@ -262,8 +265,28 @@ count_unique_names <- function(name_list) {
     return(counts)
 }
 
-remove_fun <- function(df) {
-    names(df) <- gsub(".*\\.fun\\.", "", names(df))
+get_main_parent_names <- function(df) {
+    # Initialize an empty list to store the parent names
+    main_parent_names <- list()
+
+    # Loop through each column name extract the bits before the first dot
+    for (name in names(df)) {
+        main_parent_name <- gsub("\\..*", "", name)
+        main_parent_names[[name]] <- main_parent_name
+    }
+
+    #  Sentence case the main parent names and replace underscores with spaces
+    main_parent_names <- stringr::str_replace_all(
+        stringr::str_to_sentence(main_parent_names),
+        "_", " "
+    )
+
+    return(main_parent_names)
+}
+
+remove_main_parent <- function(df) {
+    # Delete beginning of the string until the first dot in each column name
+    names(df) <- gsub("^[^.]*\\.", "", names(df))
     return(df)
 }
 
@@ -288,6 +311,14 @@ get_parent_names <- function(df) {
     return(parent_names)
 }
 
+remove_fun <- function(df) {
+    # If has dual .fun. in name, remove everything before it including .fun.
+    names(df) <- gsub(".*\\.fun\\.", "", names(df))
+    # Then if it ends with .fun, remove it
+    names(df) <- gsub("\\.fun$", "", names(df))
+
+    return(df)
+}
 
 # Define a named list of statistics functions for each checkbox input
 statistics <- list(
@@ -333,7 +364,7 @@ statistics <- list(
         )),
         "Kolmogorov-Smirnov" = list(fun = list(
             "D" = .ks_d,
-            "Lilliefors corr. p" = .ks_p_lilliefors
+            "Lilliefors corrected p" = .ks_p_lilliefors
         ))
     )
 )
@@ -384,77 +415,46 @@ descriptive_server <- function(input, output, session,
         return(checked)
     })
 
-    # Generate normality table
-    output$normality_table <- function() {
-        req(df())
-        if (length(input$var) == 0 || length(input$normality) == 0) {
-            return(NULL)
-        }
-
-        stat_functions <- unlist(statistics$normality[input$normality])
-        stats <- lapply(df(), function(x) {
-            lapply(stat_functions, function(f) f(x))
-        })
-
-        # Combine stats into a table
-        stats_df <- as.data.frame(stats)
-        names(stats_df) <- names(stat_functions)
-        parent_names <- get_parent_names(stats_df)
-        stats_df <- remove_fun(stats_df)
-        rownames(stats_df) <- input$var
-
-        # Format table
-        kable(stats_df,
-            "html",
-            align = c("l", rep("c", length(stats_df) - 1)),
-            caption = "Tests for normality",
-            digits = digits,
-            escape = TRUE
-        ) %>%
-            kableExtra::kable_classic(
-                full_width = FALSE,
-                html_font = "inherit",
-                position = "left"
-            ) %>%
-            kableExtra::add_header_above(
-                c(" " = 1, count_unique_names(parent_names))
-            )
-    }
-
     # Generate descriptive table
     output$descriptives <- function() {
-        req(df())
-        if (length(input$var) == 0 || length(input$normality) == 0) {
-            return(NULL)
-        }
+        if (length(input$var) > 0 && length(checked()) > 0) {
+            stat_functions <- unlist(checked())
+            stats <- lapply(df(), function(x) {
+                lapply(stat_functions, function(f) f(x))
+            })
 
-        stat_functions <- unlist(checked())
-        stats <- lapply(df(), function(x) {
-            lapply(stat_functions, function(f) f(x))
-        })
+            # Combine stats into a table
+            stats_df <- as.data.frame(stats)
+            # Name the columns with the names of the statistics
+            names(stats_df) <- names(stat_functions)
+            # Get the main parent names to a list and cut it off
+            main_parent_names <- get_main_parent_names(stats_df)
+            stats_df <- remove_main_parent(stats_df)
+            ## Get intermediate parent for a statistic with multiple output columns
+            parent_names <- get_parent_names(stats_df)
+            stats_df <- remove_fun(stats_df)
+            # Add variable names as rownames
+            rownames(stats_df) <- input$var
 
-        # Combine stats into a table
-        stats_df <- as.data.frame(stats)
-        names(stats_df) <- names(stat_functions)
-        parent_names <- get_parent_names(stats_df)
-        stats_df <- remove_fun(stats_df)
-        rownames(stats_df) <- input$var
-
-        # Format table
-        kable(stats_df,
-            "html",
-            align = c("l", rep("c", length(stats_df) - 1)),
-            caption = "Descriptive statistics",
-            digits = digits,
-            escape = TRUE
-        ) %>%
-            kableExtra::kable_classic(
-                full_width = FALSE,
-                html_font = "inherit",
-                position = "left"
+            # Format table
+            kable(stats_df,
+                "html",
+                align = c("l", rep("c", length(stats_df) - 1)),
+                caption = "Descriptive statistics",
+                digits = digits,
+                escape = TRUE
             ) %>%
-            kableExtra::add_header_above(
-                c(" " = 1, count_unique_names(parent_names))
-            )
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                kableExtra::add_header_above(
+                    c(" " = 1, count_unique_names(parent_names))
+                ) %>%
+                kableExtra::add_header_above(
+                    c(" " = 1, count_unique_names(main_parent_names))
+                )
+        }
     }
 }
