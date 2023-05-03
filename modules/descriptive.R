@@ -4,13 +4,16 @@ library(shiny)
 library(dplyr) # for data manipulation
 library(stringr) # for string manipulation
 library(boot) # for bootstrapping
-library(ggplot2) # for plotting
 library(e1071) # skewness and kurtosis type 2
 library(nortest) # Lilliefors test
 library(shinyWidgets) # for custom widgets
 library(knitr) # for kable
 library(kableExtra) # extra formatting for kable
 
+# Source plots
+source("modules/plots.R")
+
+# Define UI
 descriptive_ui <- function(id) {
     ns <- NS(id)
     tagList(
@@ -70,8 +73,7 @@ descriptive_ui <- function(id) {
                     width = 12,
                     h4("Results"),
                     tableOutput(ns("descriptives")),
-                    plotOutput(ns("histogram")),
-                    plotOutput(ns("qqplot"))
+                    uiOutput(ns("plots"))
                 )
             )
         )
@@ -217,10 +219,7 @@ descriptive_ui <- function(id) {
     return(max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 }
 .iqr <- function(x) {
-    return(
-        quantile(x, probs = 0.75, na.rm = TRUE) -
-            quantile(x, probs = 0.25, na.rm = TRUE)
-    )
+    return(IQR(x, na.rm = TRUE))
 }
 .min <- function(x) {
     return(min(x, na.rm = TRUE))
@@ -230,7 +229,7 @@ descriptive_ui <- function(id) {
 }
 #    Normality
 .shapiro <- function(x) {
-    return(shapiro.test(x)$statistic)
+    return(shapiro.test(x)$statistic[[1]])
 }
 .shapiro_p <- function(x) {
     return(shapiro.test(x)$p.value)
@@ -254,9 +253,7 @@ count_unique_names <- function(name_list) {
         # If the element is not in the counts list, add it with count 1
         if (!(name %in% names(counts))) {
             counts[[name]] <- 1
-        }
-        # If the element is already in the counts list, increment its count
-        else {
+        } else {
             counts[[name]] <- counts[[name]] + 1
         }
     }
@@ -419,22 +416,19 @@ descriptive_server <- function(input, output, session,
     output$descriptives <- function() {
         if (length(input$var) > 0 && length(checked()) > 0) {
             stat_functions <- unlist(checked())
-            stats <- lapply(df(), function(x) {
+            # Apply each statistic to the data frame
+            stats <- apply(df(), 2, function(x) {
                 lapply(stat_functions, function(f) f(x))
             })
-
             # Combine stats into a table
-            stats_df <- as.data.frame(stats)
-            # Name the columns with the names of the statistics
-            names(stats_df) <- names(stat_functions)
+            stats_df <- data.frame(t(sapply(stats, unlist)))
             # Get the main parent names to a list and cut it off
             main_parent_names <- get_main_parent_names(stats_df)
             stats_df <- remove_main_parent(stats_df)
             ## Get intermediate parent for a statistic with multiple output columns
             parent_names <- get_parent_names(stats_df)
             stats_df <- remove_fun(stats_df)
-            # Add variable names as rownames
-            rownames(stats_df) <- input$var
+
 
             # Format table
             kable(stats_df,
@@ -442,6 +436,7 @@ descriptive_server <- function(input, output, session,
                 align = c("l", rep("c", length(stats_df) - 1)),
                 caption = "Descriptive statistics",
                 digits = digits,
+                row.names = TRUE,
                 escape = TRUE
             ) %>%
                 kableExtra::kable_classic(
