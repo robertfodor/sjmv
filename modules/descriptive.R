@@ -97,7 +97,9 @@ descriptive_ui <- function(id) {
 .mean_ci_core <- function(x, ci_level = 0.95) {
     return(t.test(x, conf.level = ci_level)$conf.int)
 }
-.mean_ci_bootstrapped <- function(x, ci_level = 0.95, sample_size = 1000, type = "perc") {
+.mean_ci_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, type = "perc") {
     boot <- boot::boot(x, mean, R = sample_size)
     if (type == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
@@ -133,7 +135,9 @@ descriptive_ui <- function(id) {
 .skewness_ci_core <- function(x, ci_level = 0.95) {
     return(t.test(x, conf.level = ci_level)$conf.int)
 }
-.skewness_ci_bootstrapped <- function(x, ci_level = 0.95, sample_size = 1000, type = "perc") {
+.skewness_ci_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, type = "perc") {
     boot <- boot::boot(x, e1071::skewness, R = sample_size)
     if (type == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
@@ -162,7 +166,9 @@ descriptive_ui <- function(id) {
 .kurtosis_ci_core <- function(x, ci_level = 0.95) {
     return(t.test(x, conf.level = ci_level)$conf.int)
 }
-.kurtosis_ci_bootstrapped <- function(x, ci_level = 0.95, sample_size = 1000, type = "perc") {
+.kurtosis_ci_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, type = "perc") {
     boot <- boot::boot(x, e1071::kurtosis, R = sample_size)
     if (type == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
@@ -189,7 +195,9 @@ descriptive_ui <- function(id) {
 .sd_ci_core <- function(x, ci_level = 0.95) {
     return(t.test(x, conf.level = ci_level)$conf.int)
 }
-.sd_ci_bootstrapped <- function(x, ci_level = 0.95, sample_size = 1000, type = "perc") {
+.sd_ci_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, type = "perc") {
     boot <- boot::boot(x, sd, R = sample_size)
     if (type == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
@@ -205,7 +213,9 @@ descriptive_ui <- function(id) {
 .var_ci_core <- function(x, ci_level = 0.95) {
     return(t.test(x, conf.level = ci_level)$conf.int)
 }
-.var_ci_bootstrapped <- function(x, ci_level = 0.95, sample_size = 1000, type = "perc") {
+.var_ci_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, type = "perc") {
     boot <- boot::boot(x, var, R = sample_size)
     if (type == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
@@ -244,7 +254,7 @@ descriptive_ui <- function(id) {
 
 #  Helper functions
 ##   Creates enumerated names to put into header
-count_unique_names <- function(name_list) {
+.count_unique_names <- function(name_list) {
     # Initialize an empty list to store the counts
     counts <- list()
 
@@ -262,7 +272,7 @@ count_unique_names <- function(name_list) {
     return(counts)
 }
 
-get_main_parent_names <- function(df) {
+.get_main_parent_names <- function(df) {
     # Initialize an empty list to store the parent names
     main_parent_names <- list()
 
@@ -281,13 +291,13 @@ get_main_parent_names <- function(df) {
     return(main_parent_names)
 }
 
-remove_main_parent <- function(df) {
+.remove_main_parent <- function(df) {
     # Delete beginning of the string until the first dot in each column name
     names(df) <- gsub("^[^.]*\\.", "", names(df))
     return(df)
 }
 
-get_parent_names <- function(df) {
+.get_parent_names <- function(df) {
     # Initialize an empty list to store the parent names
     parent_names <- list()
 
@@ -308,7 +318,7 @@ get_parent_names <- function(df) {
     return(parent_names)
 }
 
-remove_fun <- function(df) {
+.remove_fun <- function(df) {
     # If has dual .fun. in name, remove everything before it including .fun.
     names(df) <- gsub(".*\\.fun\\.", "", names(df))
     # Then if it ends with .fun, remove it
@@ -379,7 +389,6 @@ descriptive_server <- function(input, output, session,
                 session = session,
                 inputId = "var",
                 choices = non_factor_variables,
-                # When digits are changed it shouldn't reset.
                 selected = isolate(input$var)
             )
         }
@@ -405,7 +414,7 @@ descriptive_server <- function(input, output, session,
 
         # Loop through each checkbox input
         for (stat in names(statistics)) {
-            # If the checkbox is checked, add the corresponding statistics to the list
+            # If the checkbox is checked, add the statistic to the list
             if (length(input[[stat]]) > 0) {
                 checked[[stat]] <- statistics[[stat]][input[[stat]]]
             }
@@ -426,32 +435,35 @@ descriptive_server <- function(input, output, session,
             # Combine stats into a table
             stats_df <- data.frame(t(sapply(stats, unlist)))
             # Get the main parent names to a list and cut it off
-            main_parent_names <- get_main_parent_names(stats_df)
-            stats_df <- remove_main_parent(stats_df)
-            ## Get intermediate parent for a statistic with multiple output columns
-            parent_names <- get_parent_names(stats_df)
-            stats_df <- remove_fun(stats_df)
-
+            main_parent_names <- .get_main_parent_names(stats_df)
+            stats_df <- .remove_main_parent(stats_df)
+            ## Get intermediate parent if multiple output columns
+            parent_names <- .get_parent_names(stats_df)
+            stats_df <- .remove_fun(stats_df)
 
             # Format table
-            kable(stats_df,
-                "html",
-                align = c("l", rep("c", length(stats_df) - 1)),
-                caption = "Descriptive statistics",
-                digits = digits,
-                row.names = TRUE,
-                escape = TRUE
-            ) %>%
+            stats_df %>%
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                kable(
+                    "html",
+                    align = c("l", rep("c", length(stats_df) - 1)),
+                    caption = "Descriptive statistics",
+                    row.names = TRUE,
+                    escape = TRUE
+                ) %>%
                 kableExtra::kable_classic(
                     full_width = FALSE,
                     html_font = "inherit",
                     position = "left"
                 ) %>%
                 kableExtra::add_header_above(
-                    c(" " = 1, count_unique_names(parent_names))
+                    c(" " = 1, .count_unique_names(parent_names))
                 ) %>%
                 kableExtra::add_header_above(
-                    c(" " = 1, count_unique_names(main_parent_names))
+                    c(" " = 1, .count_unique_names(main_parent_names))
                 )
         }
     }
