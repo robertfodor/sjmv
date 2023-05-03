@@ -99,21 +99,23 @@ descriptive_ui <- function(id) {
 }
 .mean_ci_bootstrapped <- function(
     x,
-    ci_level = 0.95, sample_size = 1000, type = "perc") {
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
     boot <- boot::boot(x, mean, R = sample_size)
-    if (type == "perc") {
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
     } else {
         stop("Invalid type.")
     }
 }
-.mean_se_bootstrapped <- function(x, sample_size = 1000) {
+.mean_se_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
     boot <- boot::boot(x, mean, R = sample_size)
-    if (type == "perc") {
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
     } else {
         stop("Invalid type.")
@@ -137,21 +139,23 @@ descriptive_ui <- function(id) {
 }
 .skewness_ci_bootstrapped <- function(
     x,
-    ci_level = 0.95, sample_size = 1000, type = "perc") {
-    boot <- boot::boot(x, e1071::skewness, R = sample_size)
-    if (type == "perc") {
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
+    boot <- boot::boot(x, .skewness, R = sample_size)
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
     } else {
         stop("Invalid type.")
     }
 }
-.skewness_se_bootstrapped <- function(x, sample_size = 1000) {
-    boot <- boot::boot(x, e1071::skewness, R = sample_size)
-    if (type == "perc") {
+.skewness_se_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
+    boot <- boot::boot(x, .skewness, R = sample_size)
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
     } else {
         stop("Invalid type.")
@@ -168,21 +172,23 @@ descriptive_ui <- function(id) {
 }
 .kurtosis_ci_bootstrapped <- function(
     x,
-    ci_level = 0.95, sample_size = 1000, type = "perc") {
-    boot <- boot::boot(x, e1071::kurtosis, R = sample_size)
-    if (type == "perc") {
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
+    boot <- boot::boot(x, .kurtosis, R = sample_size)
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
     } else {
         stop("Invalid type.")
     }
 }
-.kurtosis_se_bootstrapped <- function(x, sample_size = 1000) {
-    boot <- boot::boot(x, e1071::kurtosis, R = sample_size)
-    if (type == "perc") {
+.kurtosis_se_bootstrapped <- function(
+    x,
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
+    boot <- boot::boot(x, .kurtosis, R = sample_size)
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
     } else {
         stop("Invalid type.")
@@ -197,11 +203,11 @@ descriptive_ui <- function(id) {
 }
 .sd_ci_bootstrapped <- function(
     x,
-    ci_level = 0.95, sample_size = 1000, type = "perc") {
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
     boot <- boot::boot(x, sd, R = sample_size)
-    if (type == "perc") {
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
     } else {
         stop("Invalid type.")
@@ -215,11 +221,11 @@ descriptive_ui <- function(id) {
 }
 .var_ci_bootstrapped <- function(
     x,
-    ci_level = 0.95, sample_size = 1000, type = "perc") {
+    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
     boot <- boot::boot(x, var, R = sample_size)
-    if (type == "perc") {
+    if (bootstrap_method == "perc") {
         return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (type == "bca") {
+    } else if (bootstrap_method == "bca") {
         return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
     } else {
         stop("Invalid type.")
@@ -430,7 +436,21 @@ descriptive_server <- function(input, output, session,
             stat_functions <- unlist(checked())
             # Apply each statistic to the data frame
             stats <- apply(df(), 2, function(x) {
-                lapply(stat_functions, function(f) f(x))
+                lapply(stat_functions, function(f) {
+                    # Does it accept ci, bootstrap and sample size arguments?
+                    if ("ci_level" %in% names(formals(f)) &
+                        "bootstrap_method" %in% names(formals(f)) &
+                        "sample_size" %in% names(formals(f))) {
+                        # Call the function with the arguments
+                        f(x,
+                            ci_level = ci_level,
+                            bootstrap_method = bootstrap_method,
+                            sample_size = bootstrap_sample_size
+                        )
+                    } else {
+                        f(x)
+                    }
+                })
             })
             # Combine stats into a table
             stats_df <- data.frame(t(sapply(stats, unlist)))
