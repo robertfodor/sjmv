@@ -387,7 +387,10 @@ descriptive_server <- function(input, output, session,
 
     # Data source
     df <- reactive({
-        if (length(input$var) > 0) {
+        # Check the input$var items exists in non_factor_variables
+        #   and there is at least 1 item selected
+        if (length(input$var) > 0 && all(input$var %in% non_factor_variables)) {
+            # Return the selected variables from the data frame
             file_input$df %>%
                 dplyr::select(input$var)
         } else {
@@ -414,7 +417,7 @@ descriptive_server <- function(input, output, session,
 
     # Generate descriptive table
     output$descriptives <- function() {
-        if (length(input$var) > 0 && length(checked()) > 0) {
+        if (!is.null(df()) && length(checked()) > 0) {
             stat_functions <- unlist(checked())
             # Apply each statistic to the data frame
             stats <- apply(df(), 2, function(x) {
