@@ -1,9 +1,8 @@
 # This is the descriptive statistics tab for ShinyStat.
 # It takes as input the datafile uploaded in the Getting Started tab.
 library(shiny)
-library(dplyr) # for data manipulation
+library(tidyverse) # for data manipulation
 library(stringr) # for string manipulation
-library(boot) # for bootstrapping
 library(e1071) # skewness and kurtosis type 2
 library(nortest) # Lilliefors test
 library(shinyWidgets) # for custom widgets
@@ -30,33 +29,41 @@ descriptive_ui <- function(id) {
             )),
             fluidRow(
                 column(
-                    width = 6,
+                    width = 4,
+                    awesomeCheckboxGroup(
+                        inputId = ns("sample"),
+                        label = "Sample",
+                        choices = c("N", "Missing"),
+                        selected = c("N")
+                    ),
                     awesomeCheckboxGroup(
                         inputId = ns("central_tendency"),
                         label = "Central tendency",
                         choices = c(
-                            "N", "Missing", "Mean", "Mean SE", "Mean CI",
+                            "Mean", "Std Error of Mean", "Mean CI",
                             "Median", "Mode"
                         ),
-                        selected = c("N", "Mean", "Median")
-                    ),
-                    awesomeCheckboxGroup(
-                        inputId = ns("skewness_kurtosis"),
-                        label = "Skewness and kurtosis",
-                        choices = c("Skewness", "Kurtosis"),
-                        selected = c("Skewness", "Kurtosis")
+                        selected = c("Mean", "Std Error of Mean")
                     )
                 ),
                 column(
-                    width = 6,
+                    width = 4,
                     awesomeCheckboxGroup(
                         inputId = ns("dispersion"),
                         label = "Dispersion",
                         choices = c(
-                            "SD", "Var", "Range", "IQR", "Min", "Max"
+                            "SD", "Variance", "Range", "IQR", "Min", "Max"
                         ),
                         selected = c("SD", "IQR")
                     ),
+                    awesomeCheckboxGroup(
+                        inputId = ns("asymmetry"),
+                        label = "Skewness and kurtosis",
+                        choices = c("Skewness", "Kurtosis"),
+                        selected = c("Skewness", "Kurtosis")
+                    )
+                ), column(
+                    width = 4,
                     awesomeCheckboxGroup(
                         inputId = ns("normality"),
                         label = "Normality",
@@ -65,13 +72,20 @@ descriptive_ui <- function(id) {
                             "Kolmogorov-Smirnov"
                         ),
                         selected = c("Shapiro-Wilk")
+                    ),
+                    materialSwitch(
+                        inputId = ns("variables_across"),
+                        label = "Show variables across",
+                        value = FALSE,
+                        status = "info"
                     )
                 )
             ),
             fluidRow(
                 column(
                     width = 12,
-                    h4("Results"),
+                    h3("Results"),
+                    h4("Descriptive statistics"),
                     tableOutput(ns("descriptives")),
                     uiOutput(ns("plots"))
                 )
@@ -79,184 +93,6 @@ descriptive_ui <- function(id) {
         )
     )
 }
-
-# Statistics
-#    Central tendency
-.n <- function(x) {
-    return(length(x) - sum(is.na(x)))
-}
-.missing <- function(x) {
-    return(sum(is.na(x)))
-}
-.mean <- function(x) {
-    return(mean(x, na.rm = TRUE))
-}
-.mean_se <- function(x) {
-    return(sd(x, na.rm = TRUE) / sqrt(.n(x)))
-}
-.mean_ci_core <- function(x, ci_level = 0.95) {
-    return(t.test(x, conf.level = ci_level)$conf.int)
-}
-.mean_ci_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, mean, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.mean_se_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, mean, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.median <- function(x) {
-    return(median(x, na.rm = TRUE))
-}
-.mode <- function(x) {
-    return(as.numeric(names(sort(-table(x)))[1]))
-}
-#    Skewness and kurtosis
-.skewness <- function(x) {
-    return(e1071::skewness(x, type = 2))
-}
-.skewness_se <- function(x) {
-    return(sd(x, na.rm = TRUE) / sqrt(.n(x)))
-}
-.skewness_ci_core <- function(x, ci_level = 0.95) {
-    return(t.test(x, conf.level = ci_level)$conf.int)
-}
-.skewness_ci_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, .skewness, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.skewness_se_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, .skewness, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.kurtosis <- function(x) {
-    return(e1071::kurtosis(x, type = 2))
-}
-.kurtosis_se <- function(x) {
-    return(sd(x, na.rm = TRUE) / sqrt(.n(x)))
-}
-.kurtosis_ci_core <- function(x, ci_level = 0.95) {
-    return(t.test(x, conf.level = ci_level)$conf.int)
-}
-.kurtosis_ci_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, .kurtosis, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.kurtosis_se_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, .kurtosis, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[3])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[3])
-    } else {
-        stop("Invalid type.")
-    }
-}
-#    Dispersion
-.sd <- function(x) {
-    return(sd(x, na.rm = TRUE))
-}
-.sd_ci_core <- function(x, ci_level = 0.95) {
-    return(t.test(x, conf.level = ci_level)$conf.int)
-}
-.sd_ci_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, sd, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.var <- function(x) {
-    return(var(x, na.rm = TRUE))
-}
-.var_ci_core <- function(x, ci_level = 0.95) {
-    return(t.test(x, conf.level = ci_level)$conf.int)
-}
-.var_ci_bootstrapped <- function(
-    x,
-    ci_level = 0.95, sample_size = 1000, bootstrap_method = "perc") {
-    boot <- boot::boot(x, var, R = sample_size)
-    if (bootstrap_method == "perc") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "perc")$perc[4:5])
-    } else if (bootstrap_method == "bca") {
-        return(boot::boot.ci(boot, conf = ci_level, type = "bca")$bca[4:5])
-    } else {
-        stop("Invalid type.")
-    }
-}
-.range <- function(x) {
-    return(max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
-}
-.iqr <- function(x) {
-    return(IQR(x, na.rm = TRUE))
-}
-.min <- function(x) {
-    return(min(x, na.rm = TRUE))
-}
-.max <- function(x) {
-    return(max(x, na.rm = TRUE))
-}
-#    Normality
-.shapiro <- function(x) {
-    return(shapiro.test(x)$statistic[[1]])
-}
-.shapiro_p <- function(x) {
-    return(shapiro.test(x)$p.value)
-}
-.ks_d <- function(x) {
-    return(nortest::lillie.test(x)$statistic)
-}
-.ks_p_lilliefors <- function(x) {
-    return(nortest::lillie.test(x)$p.value)
-}
-
 
 #  Helper functions
 ##   Creates enumerated names to put into header
@@ -278,114 +114,93 @@ descriptive_ui <- function(id) {
     return(counts)
 }
 
-.get_main_parent_names <- function(df) {
-    # Initialize an empty list to store the parent names
-    main_parent_names <- list()
-
-    # Loop through each column name extract the bits before the first dot
-    for (name in names(df)) {
-        main_parent_name <- gsub("\\..*", "", name)
-        main_parent_names[[name]] <- main_parent_name
-    }
-
-    #  Sentence case the main parent names and replace underscores with spaces
-    main_parent_names <- stringr::str_replace_all(
-        stringr::str_to_sentence(main_parent_names),
-        "_", " "
-    )
-
-    return(main_parent_names)
-}
-
-.remove_main_parent <- function(df) {
-    # Delete beginning of the string until the first dot in each column name
-    names(df) <- gsub("^[^.]*\\.", "", names(df))
-    return(df)
-}
-
-.get_parent_names <- function(df) {
-    # Initialize an empty list to store the parent names
-    parent_names <- list()
-
-    # Loop through each column name in the data frame
-    for (name in names(df)) {
-        # If the column name contains ".fun.", extract the parent name before it
-        if (grepl("\\.fun\\.", name)) {
-            parent_name <- gsub("\\.fun\\..*", "", name)
-        } else {
-            parent_name <- " "
-        }
-
-        # Add the parent name to the list
-        parent_names[[name]] <- parent_name
-    }
-
-    # Return the list of parent names
-    return(parent_names)
-}
-
-.remove_fun <- function(df) {
-    # If has dual .fun. in name, remove everything before it including .fun.
-    names(df) <- gsub(".*\\.fun\\.", "", names(df))
-    # Then if it ends with .fun, remove it
-    names(df) <- gsub("\\.fun$", "", names(df))
-
-    return(df)
-}
-
-# Define a named list of statistics functions for each checkbox input
-statistics <- list(
-    central_tendency = list(
-        N = list(fun = .n),
-        Missing = list(fun = .missing),
-        Mean = list(fun = .mean),
-        "Mean SE" = list(fun = .mean_se),
-        "Mean CI" = list(fun = .mean_ci_core),
-        "Mean CI Bootstrapped" = list(fun = .mean_ci_bootstrapped),
-        "Mean SE Bootstrapped" = list(fun = .mean_se_bootstrapped),
-        Median = list(fun = .median),
-        Mode = list(fun = .mode)
+# Statistical functions
+statistics <- tibble(
+    filter = c(
+        "N", "Missing",
+        "Mean", "Std Error of Mean", rep("Mean CI", 2), "Median", "Mode",
+        rep("Skewness", 2), rep("Kurtosis", 2),
+        "SD", "Variance", "Range", "IQR", "Min", "Max",
+        rep("Shapiro-Wilk", 2),
+        rep("Kolmogorov-Smirnov", 2)
     ),
-    skewness_kurtosis = list(
-        Skewness = list(fun = .skewness),
-        "Skewness SE" = list(fun = .skewness_se),
-        "Skewness CI" = list(fun = .skewness_ci_core),
-        "Skewness CI Bootstrapped" = list(fun = .skewness_ci_bootstrapped),
-        "Skewness SE Bootstrapped" = list(fun = .skewness_se_bootstrapped),
-        Kurtosis = list(fun = .kurtosis),
-        "Kurtosis SE" = list(fun = .kurtosis_se),
-        "Kurtosis CI" = list(fun = .kurtosis_ci_core),
-        "Kurtosis CI Bootstrapped" = list(fun = .kurtosis_ci_bootstrapped),
-        "Kurtosis SE Bootstrapped" = list(fun = .kurtosis_se_bootstrapped)
+    label = c(
+        "N", "Missing",
+        "M", "SEM", "CI lower bound", "CI upper bound", "Median", "Mode",
+        "Skewness", "SE", "Kurtosis", "SE",
+        "SD", "Variance", "Range", "IQR", "Min", "Max",
+        "W", "p",
+        "D", "p (Lilliefors)"
     ),
-    dispersion = list(
-        SD = list(fun = .sd),
-        "SD CI" = list(fun = .sd_ci_core),
-        "SD CI Bootstrapped" = list(fun = .sd_ci_bootstrapped),
-        Var = list(fun = .var),
-        "Var CI" = list(fun = .var_ci_core),
-        "Var CI Bootstrapped" = list(fun = .var_ci_bootstrapped),
-        Range = list(fun = .range),
-        IQR = list(fun = .iqr),
-        Min = list(fun = .min),
-        Max = list(fun = .max)
-    ),
-    normality = list(
-        "Shapiro-Wilk" = list(fun = list(
-            "W" = .shapiro,
-            "p-value" = .shapiro_p
-        )),
-        "Kolmogorov-Smirnov" = list(fun = list(
-            "D" = .ks_d,
-            "Lilliefors corrected p" = .ks_p_lilliefors
-        ))
+    fun = list(
+        # Sample
+        function(x) length(x) - sum(is.na(x)),
+        function(x) sum(is.na(x)),
+        # Central tendency
+        function(x) mean(x, trim = 0, na.rm = TRUE),
+        function(x) sd(x, na.rm = TRUE) / sqrt(length(x) - sum(is.na(x))),
+        function(x, ci_level = 0.95) {
+            t.test(x, conf.level = ci_level)$conf.int[1]
+        },
+        function(x, ci_level = 0.95) {
+            t.test(x, conf.level = ci_level)$conf.int[2]
+        },
+        function(x) median(x, na.rm = TRUE),
+        function(x) as.numeric(names(sort(-table(x)))[1]),
+        # Asymmetry
+        function(x) e1071::skewness(x, type = 2),
+        function(x) sd(x, na.rm = TRUE) / sqrt(length(x) - sum(is.na(x))),
+        function(x) e1071::kurtosis(x, type = 2),
+        function(x) sd(x, na.rm = TRUE) / sqrt(length(x) - sum(is.na(x))),
+        # Dispersion
+        function(x) sd(x, na.rm = TRUE),
+        function(x) var(x, na.rm = TRUE),
+        function(x) max(x, na.rm = TRUE) - min(x, na.rm = TRUE),
+        function(x) IQR(x, na.rm = TRUE),
+        function(x) min(x, na.rm = TRUE),
+        function(x) max(x, na.rm = TRUE),
+        # Normality
+        function(x) shapiro.test(x)$statistic[[1]],
+        function(x) shapiro.test(x)$p.value,
+        function(x) nortest::lillie.test(x)$statistic,
+        function(x) nortest::lillie.test(x)$p.value
     )
 )
 
+# Function to filter through based on selections
+.get_functions <- function(x) {
+    funs <- lapply(intersect(x, statistics$filter), function(f) {
+        idx <- which(statistics$filter == f)
+        if (length(idx) > 1) {
+            return(statistics$fun[idx])
+        } else {
+            return(statistics$fun[[idx]])
+        }
+    })
+    return(funs)
+}
+
+# Function to apply the functions to the data
+.apply_functions <- function(df, funs) {
+    # Apply functions to each column and store results in new data frame
+    stats <- data.frame(lapply(df, function(x) {
+        unlist(lapply(funs, function(f) {
+            if (length(f) > 1) {
+                return(unlist(lapply(f, function(ff) ff(x))))
+            } else {
+                return(f(x))
+            }
+        }))
+    }))
+
+    return(t(stats))
+}
+
+
+# Define the UI for the application
 descriptive_server <- function(input, output, session,
                                file_input, non_factor_variables,
-                               digits, ci_level,
-                               bootstrap_method, bootstrap_sample_size) {
+                               digits, ci_level) {
     # UI renders
     #    Update the choices of the pickerInput based on non_factor_variables
     observeEvent(
@@ -413,56 +228,31 @@ descriptive_server <- function(input, output, session,
         }
     })
 
-    #  Combine all checked statistics into a list
-    checked <- reactive({
-        # Initialize an empty list to store the checked statistics
-        checked <- list()
-
-        # Loop through each checkbox input
-        for (stat in names(statistics)) {
-            # If the checkbox is checked, add the statistic to the list
-            if (length(input[[stat]]) > 0) {
-                checked[[stat]] <- statistics[[stat]][input[[stat]]]
-            }
-        }
-
-        # Return the list of checked statistics
-        return(checked)
-    })
-
     # Generate descriptive table
     output$descriptives <- function() {
-        if (!is.null(df()) && length(checked()) > 0) {
-            stat_functions <- unlist(checked())
-            # Apply each statistic to the data frame
-            stats <- apply(df(), 2, function(x) {
-                lapply(stat_functions, function(f) {
-                    # Does it accept ci, bootstrap and sample size arguments?
-                    if ("ci_level" %in% names(formals(f)) &
-                        "bootstrap_method" %in% names(formals(f)) &
-                        "sample_size" %in% names(formals(f))) {
-                        # Call the function with the arguments
-                        f(x,
-                            ci_level = ci_level,
-                            bootstrap_method = bootstrap_method,
-                            sample_size = bootstrap_sample_size
-                        )
-                    } else {
-                        f(x)
-                    }
-                })
-            })
-            # Combine stats into a table
-            stats_df <- data.frame(t(sapply(stats, unlist)))
-            # Get the main parent names to a list and cut it off
-            main_parent_names <- .get_main_parent_names(stats_df)
-            stats_df <- .remove_main_parent(stats_df)
-            ## Get intermediate parent if multiple output columns
-            parent_names <- .get_parent_names(stats_df)
-            stats_df <- .remove_fun(stats_df)
+        inputfilter <- c(
+            input$sample,
+            input$central_tendency,
+            input$asymmetry,
+            input$dispersion,
+            input$normality
+        )
+
+        if (!is.null(df()) && length(inputfilter) > 0) {
+            # Get the functions to apply
+            stats_df <- .apply_functions(
+                df = df(),
+                funs = .get_functions(inputfilter)
+            )
+
+            if (input$variables_across) {
+                # Transpose the data frame
+                stats_df <- t(stats_df)
+            }
 
             # Format table
             stats_df %>%
+                as.data.frame() %>%
                 dplyr::mutate_if(
                     is.numeric,
                     ~ sprintf(paste0("%.", digits, "f"), .)
@@ -478,12 +268,6 @@ descriptive_server <- function(input, output, session,
                     full_width = FALSE,
                     html_font = "inherit",
                     position = "left"
-                ) %>%
-                kableExtra::add_header_above(
-                    c(" " = 1, .count_unique_names(parent_names))
-                ) %>%
-                kableExtra::add_header_above(
-                    c(" " = 1, .count_unique_names(main_parent_names))
                 )
         }
     }
