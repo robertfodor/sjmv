@@ -64,20 +64,7 @@ ui <- dashboardPage(
           min = 0,
           max = 100,
           step = 1
-        ),
-        # dropdown for bootstrap method
-        pickerInput(
-          inputId = "bootstrap_method",
-          label = "Bootstrap method:",
-          choices = list(
-            "Do not perform" = c("None"),
-            "Select bootstrap method:" = c(
-              "Percentile",
-              "Bias corrected accelerated (BCa)"
-            )
-          )
-        ),
-        uiOutput("bootstrap")
+        )
       )
     )
   ),
@@ -112,26 +99,6 @@ ui <- dashboardPage(
 
 # Define server logic
 server <- function(input, output, session) {
-  # Render base UI
-  ##    Render bootstrap input
-  observeEvent(input$bootstrap_method, {
-    if (input$bootstrap_method != "None") {
-      output$bootstrap <- renderUI({
-        numericInput(
-          inputId = "bootstrap_sample_size",
-          label = "Bootstrap samples:",
-          value = 1000,
-          min = 20,
-          max = 20000,
-          step = 1
-        )
-      })
-    } else {
-      return(NULL)
-    }
-  })
-
-
   # Call modules
   #  Input: Getting Started
   file_input <- callModule(
@@ -151,41 +118,6 @@ server <- function(input, output, session) {
     }
   })
 
-  # Settings to be passed to modules
-  settings <- reactiveValues(
-    digits = 3,
-    ci = 0.95,
-    bootstrap_method_code = "none",
-    bootstrap_sample_size = 0
-  )
-
-  observe({
-    settings$digits <- input$digits
-  })
-
-  observe({
-    settings$ci_level <- input$ci / 100
-  })
-
-  observe({
-    settings$bootstrap_method_code <- if (input$bootstrap_method == "Percentile") {
-      "perc"
-    } else if (input$bootstrap_method == "Bias corrected accelerated (BCa)") {
-      "bca"
-    } else {
-      "none"
-    }
-  })
-
-  observe({
-    settings$bootstrap_sample_size <- # if input doesn't exist, set to 0
-      if (exists("input$bootstrap_sample_size")) {
-        input$bootstrap_sample_size
-      } else {
-        0
-      }
-  })
-
   ##  Output: Descriptive statistics
   observe(
     if (substr(input$tabs, 1, 5) == "descr") {
@@ -194,10 +126,8 @@ server <- function(input, output, session) {
         id = input$tabs,
         file_input = file_input,
         non_factor_variables = non_factor_variables(),
-        digits = settings$digits,
-        ci_level = settings$ci,
-        bootstrap_method = settings$bootstrap_method_code,
-        bootstrap_sample_size = settings$bootstrap_sample_size
+        digits = input$digits,
+        ci_level = (input$ci / 100)
       )
     }
   )
