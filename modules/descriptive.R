@@ -180,6 +180,20 @@ statistics <- tibble(
     return(funs)
 }
 
+# Function to filter through based on selections and return labels
+.get_labels <- function(x) {
+    labels <- character()
+    for (f in intersect(x, statistics$filter)) {
+        idx <- which(statistics$filter == f)
+        if (length(idx) > 1) {
+            labels <- c(labels, statistics$label[idx])
+        } else {
+            labels <- c(labels, statistics$label[[idx]])
+        }
+    }
+    return(labels)
+}
+
 # Function to apply the functions to the data
 .apply_functions <- function(df, funs) {
     # Apply functions to each column and store results in new data frame
@@ -245,9 +259,20 @@ descriptive_server <- function(input, output, session,
                 funs = .get_functions(inputfilter)
             )
 
+            # Get the labels
+            labels <- .get_labels(inputfilter)
+            columnnames <- c()
+            rownames <- c()
+
             if (input$variables_across) {
-                # Transpose the data frame
                 stats_df <- t(stats_df)
+                stats_df <- stats_df %>%
+                    cbind(labels, .)
+                columnnames <- c("Statistics", unlist(input$var))
+            } else {
+                stats_df <- stats_df %>%
+                    cbind(unlist(input$var), .)
+                columnnames <- c("Variables", labels)
             }
 
             # Format table
@@ -261,7 +286,9 @@ descriptive_server <- function(input, output, session,
                     "html",
                     align = c("l", rep("c", length(stats_df) - 1)),
                     caption = "Descriptive statistics",
-                    row.names = TRUE,
+                    # Must store variables in column due to duplicate row names
+                    row.names = FALSE,
+                    col.names = columnnames,
                     escape = TRUE
                 ) %>%
                 kableExtra::kable_classic(
