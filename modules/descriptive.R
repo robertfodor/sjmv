@@ -220,7 +220,6 @@ statistics <- tibble(
         } else if (formatting[i] == "p") {
             x_eval[, i] <- formatC(x[, i], format = "f", digits = pdigits + 1)
             x[, i] <- formatC(x[, i], format = "f", digits = pdigits)
-            print(x_eval[, i])
             for (j in 1:nrow(x)) {
                 to <- 3 + pdigits - 1
                 zeros <- paste0(rep("0", pdigits), collapse = "")
