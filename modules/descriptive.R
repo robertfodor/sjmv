@@ -94,26 +94,6 @@ descriptive_ui <- function(id) {
     )
 }
 
-#  Helper functions
-##   Creates enumerated names to put into header
-.count_unique_names <- function(name_list) {
-    # Initialize an empty list to store the counts
-    counts <- list()
-
-    # Loop through each element in name_list
-    for (name in name_list) {
-        # If the element is not in the counts list, add it with count 1
-        if (!(name %in% names(counts))) {
-            counts[[name]] <- 1
-        } else {
-            counts[[name]] <- counts[[name]] + 1
-        }
-    }
-
-    # Return the counts list
-    return(counts)
-}
-
 # Statistical functions
 statistics <- tibble(
     filter = c(
@@ -131,6 +111,12 @@ statistics <- tibble(
         "SD", "Variance", "Range", "IQR", "Min", "Max",
         "W", "p",
         "D", "p (Lilliefors)"
+    ),
+    specialformat = c(
+        rep("int", 2),
+        rep("float", 6 + 4 + 6),
+        "float", "p",
+        "float", "p"
     ),
     fun = list(
         # Sample
@@ -194,6 +180,61 @@ statistics <- tibble(
     return(labels)
 }
 
+# Function to get back the parent labels from the statistics
+.get_parent_labels <- function(x) {
+    parent_labels <- character()
+    for (f in intersect(x, statistics$filter)) {
+        idx <- which(statistics$filter == f)
+        if (length(idx) > 1) {
+            parent_labels <- c(parent_labels, statistics$filter[idx])
+        } else {
+            parent_labels <- c(parent_labels, statistics$filter[[idx]])
+        }
+    }
+    return(parent_labels)
+}
+
+# Function to get back the special formats from the statistics
+.get_format <- function(x) {
+    specialformat <- character()
+    for (f in intersect(x, statistics$filter)) {
+        idx <- which(statistics$filter == f)
+        if (length(idx) > 1) {
+            specialformat <- c(specialformat, statistics$specialformat[idx])
+        } else {
+            specialformat <- c(specialformat, statistics$specialformat[[idx]])
+        }
+    }
+    return(specialformat)
+}
+
+# Function to apply formatting
+.format_statistics <- function(x, filter, digits, pdigits) {
+    formatting <- .get_format(filter)
+    for (i in 1:ncol(x)) {
+        if (formatting[i] == "int") {
+            x[, i] <- formatC(x[, i], format = "d")
+        } else if (formatting[i] == "float") {
+            x[, i] <- formatC(x[, i], format = "f", digits = digits)
+        } else if (formatting[i] == "p") {
+            x[, i] <- formatC(x[, i], format = "f", digits = pdigits + 1)
+            for (j in 1:nrow(x)) {
+                if (substr(x[j, i], 3, 5) == "000") {
+                    x[j, i] <- "< .001"
+                } else {
+                    x[j, i] <- round(as.numeric(x[j, i]), digits = 3)
+                }
+            }
+        }
+    }
+    # Now convert all to character for display
+    for (i in 1:ncol(x)) {
+        x[, i] <- as.character(x[, i])
+    }
+
+    return(x)
+}
+
 # Function to apply the functions to the data
 .apply_functions <- function(df, funs) {
     # Apply functions to each column and store results in new data frame
@@ -214,7 +255,7 @@ statistics <- tibble(
 # Define the UI for the application
 descriptive_server <- function(input, output, session,
                                file_input, non_factor_variables,
-                               digits, ci_level) {
+                               digits, p_value_digits, ci_level) {
     # UI renders
     #    Update the choices of the pickerInput based on non_factor_variables
     observeEvent(
@@ -242,6 +283,12 @@ descriptive_server <- function(input, output, session,
         }
     })
 
+    settings <- reactiveValues(
+        digits = digits,
+        p_value_digits = p_value_digits,
+        ci_level = ci_level
+    )
+
     # Generate descriptive table
     output$descriptives <- function() {
         inputfilter <- c(
@@ -262,7 +309,14 @@ descriptive_server <- function(input, output, session,
             # Get the labels
             labels <- .get_labels(inputfilter)
             columnnames <- c()
-            rownames <- c()
+
+            # Apply formatting
+            stats_df <- stats_df %>%
+                as.data.frame()
+            stats_df <- .format_statistics(stats_df,
+                filter = inputfilter, digits = settings$digits,
+                pdigits = settings$p_value_digits
+            )
 
             if (input$variables_across) {
                 stats_df <- t(stats_df)
@@ -277,11 +331,6 @@ descriptive_server <- function(input, output, session,
 
             # Format table
             stats_df %>%
-                as.data.frame() %>%
-                dplyr::mutate_if(
-                    is.numeric,
-                    ~ sprintf(paste0("%.", digits, "f"), .)
-                ) %>%
                 kable(
                     "html",
                     align = c("l", rep("c", length(stats_df) - 1)),

@@ -52,7 +52,14 @@ ui <- dashboardPage(
         icon = icon(name = "cog"),
         sliderTextInput(
           inputId = "digits",
-          label = "Decimal places:",
+          label = "Decimal places for numbers:",
+          choices = seq(2, 6, 1),
+          grid = TRUE,
+          selected = 3
+        ),
+        sliderTextInput(
+          inputId = "p_value_digits",
+          label = "Decimal places for significance:",
           choices = seq(2, 6, 1),
           grid = TRUE,
           selected = 3
@@ -127,6 +134,7 @@ server <- function(input, output, session) {
         file_input = file_input,
         non_factor_variables = non_factor_variables(),
         digits = input$digits,
+        p_value_digits = input$p_value_digits,
         ci_level = (input$ci / 100)
       )
     }
