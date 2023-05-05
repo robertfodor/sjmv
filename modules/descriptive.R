@@ -211,23 +211,27 @@ statistics <- tibble(
 # Function to apply formatting
 .format_statistics <- function(x, filter, digits, pdigits) {
     formatting <- .get_format(filter)
+    x_eval <- x
     for (i in 1:ncol(x)) {
         if (formatting[i] == "int") {
             x[, i] <- formatC(x[, i], format = "d")
         } else if (formatting[i] == "float") {
             x[, i] <- formatC(x[, i], format = "f", digits = digits)
         } else if (formatting[i] == "p") {
-            x[, i] <- formatC(x[, i], format = "f", digits = pdigits + 1)
+            x_eval[, i] <- formatC(x[, i], format = "f", digits = pdigits + 1)
+            x[, i] <- formatC(x[, i], format = "f", digits = pdigits)
+            print(x_eval[, i])
             for (j in 1:nrow(x)) {
-                if (substr(x[j, i], 3, 5) == "000") {
-                    x[j, i] <- "< .001"
-                } else {
-                    x[j, i] <- round(as.numeric(x[j, i]), digits = 3)
+                to <- 3 + pdigits - 1
+                zeros <- paste0(rep("0", pdigits), collapse = "")
+                repl <- paste0("< .", paste0(rep("0", pdigits - 1), collapse = ""), "1", collapse = "")
+                if (substr(x_eval[j, i], 3, to) == zeros) {
+                    x[j, i] <- repl
                 }
             }
         }
     }
-    # Now convert all to character for display
+    # Now convert all to character
     for (i in 1:ncol(x)) {
         x[, i] <- as.character(x[, i])
     }
