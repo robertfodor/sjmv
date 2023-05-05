@@ -1,4 +1,4 @@
-# This is the descriptive statistics tab for ShinyStat.
+# This is the descriptive statistics tab.
 # It takes as input the datafile uploaded in the Getting Started tab.
 library(shiny)
 library(tidyverse) # for data manipulation

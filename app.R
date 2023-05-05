@@ -16,7 +16,7 @@ source("modules/variance.R") # Variance analysis
 # Define UI for application
 ui <- dashboardPage(
   header = dashboardHeader(
-    title = "ShinyStat"
+    title = "SJMV"
   ),
   sidebar = dashboardSidebar(
     sidebarMenu(
@@ -80,7 +80,7 @@ ui <- dashboardPage(
     tags$head(tags$link(
       rel = "stylesheet",
       type = "text/css",
-      href = "shinystat.css"
+      href = "customsmjv.css"
     )),
     tabItems(
       tabItem(
