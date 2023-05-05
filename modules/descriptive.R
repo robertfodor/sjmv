@@ -239,20 +239,31 @@ statistics <- tibble(
 }
 
 # Function to apply the functions to the data
-.apply_functions <- function(df, funs) {
+.apply_functions <- function(df, funs, ci_level = NULL) {
     # Apply functions to each column and store results in new data frame
     stats <- data.frame(lapply(df, function(x) {
         unlist(lapply(funs, function(f) {
             if (length(f) > 1) {
-                return(unlist(lapply(f, function(ff) ff(x))))
+                # Check if the function needs the ci_level parameter before passing it
+                if ("ci_level" %in% names(formals(f[[1]]))) {
+                    return(unlist(lapply(f, function(ff) ff(x, ci_level = ci_level))))
+                } else {
+                    return(unlist(lapply(f, function(ff) ff(x))))
+                }
             } else {
-                return(f(x))
+                # Check if the function needs the ci_level parameter before passing it
+                if ("ci_level" %in% names(formals(f))) {
+                    return(f(x, ci_level = ci_level))
+                } else {
+                    return(f(x))
+                }
             }
         }))
     }))
 
     return(t(stats))
 }
+
 
 
 # Define the UI for the application
@@ -306,7 +317,8 @@ descriptive_server <- function(input, output, session,
             # Get the functions to apply
             stats_df <- .apply_functions(
                 df = df(),
-                funs = .get_functions(inputfilter)
+                funs = .get_functions(inputfilter),
+                ci_level = settings$ci_level
             )
 
             # Get the labels
