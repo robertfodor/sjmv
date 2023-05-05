@@ -16,7 +16,7 @@ source("modules/variance.R") # Variance analysis
 # Define UI for application
 ui <- dashboardPage(
   header = dashboardHeader(
-    title = "ShinyStat"
+    title = "SJMV"
   ),
   sidebar = dashboardSidebar(
     sidebarMenu(
@@ -52,10 +52,25 @@ ui <- dashboardPage(
         icon = icon(name = "cog"),
         sliderTextInput(
           inputId = "digits",
-          label = "Decimal places:",
+          label = "Decimal places for numbers:",
           choices = seq(2, 6, 1),
           grid = TRUE,
           selected = 3
+        ),
+        sliderTextInput(
+          inputId = "p_value_digits",
+          label = "Decimal places for significance:",
+          choices = seq(2, 6, 1),
+          grid = TRUE,
+          selected = 3
+        ),
+        numericInput(
+          inputId = "ci",
+          label = "Confidence interval (%):",
+          value = 95,
+          min = 0,
+          max = 100,
+          step = 1
         )
       )
     )
@@ -65,7 +80,7 @@ ui <- dashboardPage(
     tags$head(tags$link(
       rel = "stylesheet",
       type = "text/css",
-      href = "shinystat.css"
+      href = "customsmjv.css"
     )),
     tabItems(
       tabItem(
@@ -98,27 +113,19 @@ server <- function(input, output, session) {
     id = "getting_started"
   )
 
-  # Create a list of the variable classes
-  column_classes <- reactive({
-    if (length(file_input$df) > 0) {
-      return(
-        sapply(file_input$df, function(x) {
-          class(x)
-        })
-      )
-    }
-  })
-
   # Non-factor variables
   non_factor_variables <- reactive({
     if (length(file_input$df) > 0) {
       return(
-        names(file_input$df)[column_classes() != "factor"]
+        names(file_input$df)[sapply(
+          file_input$df,
+          function(x) !inherits(x, "factor")
+        )]
       )
     }
   })
 
-  #  Output: Descriptive statistics
+  ##  Output: Descriptive statistics
   observe(
     if (substr(input$tabs, 1, 5) == "descr") {
       callModule(
@@ -126,12 +133,14 @@ server <- function(input, output, session) {
         id = input$tabs,
         file_input = file_input,
         non_factor_variables = non_factor_variables(),
-        digits = input$digits
+        digits = input$digits,
+        p_value_digits = input$p_value_digits,
+        ci_level = (input$ci / 100)
       )
     }
   )
 
-  #  Output: Regression analysis
+  ##  Output: Regression analysis
   observe(
     if (substr(input$tabs, 1, 5) == "regre") {
       callModule(
@@ -143,7 +152,7 @@ server <- function(input, output, session) {
     }
   )
 
-  #  Output: Variance analysis
+  ##  Output: Variance analysis
   observe(
     if (substr(input$tabs, 1, 5) == "varia") {
       callModule(

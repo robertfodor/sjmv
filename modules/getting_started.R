@@ -1,4 +1,4 @@
-# Module for ShinyStat welcome page and data import
+# Module for welcome page and data import
 #   It passes on the uploaded data to the descriptive module
 library(shiny)
 library(shinydashboard)
@@ -15,7 +15,7 @@ getting_started_ui <- function(id) {
       fluidRow(
         column(
           width = 12,
-          h2("Welcome to ShinyStat"),
+          h2("Welcome to SJMV"),
           h3("Get started"),
           p("To get started, please upload your data file. The app currently supports SPSS (.sav), jamovi (.omv) and CSV files with first rows as header."),
           fileInput(
