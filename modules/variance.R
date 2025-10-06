@@ -188,257 +188,221 @@ variance_server <- function(
         return(df)
     })
 
-    # Check if any inputs are missing
-    missing_inputs <- reactive({
-        if (is.null(input$outcome) | is.null(input$predictors)) {
-            return(TRUE)
-        } else {
-            return(FALSE)
-        }
-    })
-
     # Create formula
     formula <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            collapse <- ifelse(
-                input$type == "Factorial ANOVA without interactions",
-                "+",
-                "*"
-            )
-            return(as.formula(paste(
-                input$outcome,
-                "~",
-                paste(input$predictors, collapse = collapse)
-            )))
-        }
+        collapse <- ifelse(
+            input$type == "Factorial ANOVA without interactions",
+            "+",
+            "*"
+        )
+        return(as.formula(paste(
+            input$outcome,
+            "~",
+            paste(input$predictors, collapse = collapse)
+        )))
     })
 
     # Create aov model
     model <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            if (input$type == "Factorial ANOVA with interactions") {
-                # Create a list of contrasts
-                factorlist <- list()
-                for (i in input$predictors) {
-                    factorlist[[i]] <- "contr.sum"
-                }
+        # VALIDATION: Check for outcome and predictor variables
+        shiny::validate(
+            shiny::need(input$outcome, "Kérem, válasszon ki egy kimeneti (függő) változót."),
+            shiny::need(input$predictors, "Kérem, válasszon ki legalább egy csoportosító (faktor) változót.")
+        )
 
-                return(
-                    aov(
-                        formula = formula(),
-                        data = df(),
-                        contrasts = factorlist
-                    )
-                )
-            } else {
-                return(aov(
-                    formula = formula(),
-                    data = df()
-                ))
+        if (input$type == "Factorial ANOVA with interactions") {
+            # Create a list of contrasts
+            factorlist <- list()
+            for (i in input$predictors) {
+                factorlist[[i]] <- "contr.sum"
             }
+
+            return(
+                aov(
+                    formula = formula(),
+                    data = df(),
+                    contrasts = factorlist
+                )
+            )
+        } else {
+            return(aov(
+                formula = formula(),
+                data = df()
+            ))
         }
     })
 
     # Levene
     levene <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            if (input$type == "Factorial ANOVA without interactions") {
-                test <- s20x::levene.test(
-                    formula(),
-                    data = df(),
-                    digit = digits,
-                    show.table = FALSE
-                )
+        if (input$type == "Factorial ANOVA without interactions") {
+            test <- s20x::levene.test(
+                formula(),
+                data = df(),
+                digit = digits,
+                show.table = FALSE
+            )
 
-                return(data.frame(
-                    Test = "Levene's test (median centered)",
-                    Statistic = sprintf(
-                        paste0("%.", digits, "f"), test$f.value[1]
-                    ),
-                    df1 = test$df[1],
-                    df2 = test$df[2],
-                    p.value = sprintf(
-                        paste0("%.", digits, "f"), test$p.value[1]
-                    )
-                ))
-            } else {
-                test <- car::leveneTest(
-                    formula(),
-                    center = "mean",
-                    data = df()
+            return(data.frame(
+                Test = "Levene's test (median centered)",
+                Statistic = sprintf(
+                    paste0("%.", digits, "f"), test$f.value[1]
+                ),
+                df1 = test$df[1],
+                df2 = test$df[2],
+                p.value = sprintf(
+                    paste0("%.", digits, "f"), test$p.value[1]
                 )
-                return(data.frame(
-                    Test = "Levene's test (mean centered)",
-                    Statistic = sprintf(
-                        paste0("%.", digits, "f"), test$`F value`[1]
-                    ),
-                    df1 = test$Df[1],
-                    df2 = test$Df[2],
-                    p.value = sprintf(
-                        paste0("%.", digits, "f"), test$`Pr(>F)`[1]
-                    )
-                ))
-            }
+            ))
+        } else {
+            test <- car::leveneTest(
+                formula(),
+                center = "mean",
+                data = df()
+            )
+            return(data.frame(
+                Test = "Levene's test (mean centered)",
+                Statistic = sprintf(
+                    paste0("%.", digits, "f"), test$`F value`[1]
+                ),
+                df1 = test$Df[1],
+                df2 = test$Df[2],
+                p.value = sprintf(
+                    paste0("%.", digits, "f"), test$`Pr(>F)`[1]
+                )
+            ))
         }
     })
 
     # Perform homogeneity of variance test first
     output$homogeneity <- function() {
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            levene() %>%
-                # dplyr::mutate_if(
-                #     is.numeric,
-                #     ~ sprintf(paste0("%.", digits, "f"), .)
-                # ) %>%
-                knitr::kable(
-                    "html",
-                    # caption = "Homogeneity of variance",
-                    align = c("l", rep("c", 4)),
-                    escape = FALSE,
-                    col.names = c(" ", "F statistic", "df1", "df2", "p-value")
-                ) %>%
-                kableExtra::kable_classic(
-                    full_width = FALSE,
-                    html_font = "inherit",
-                    position = "left"
-                )
-        }
+        # req() ensures that the model() reactive has run successfully and is not NULL
+        req(model())
+        levene() %>%
+            knitr::kable(
+                "html",
+                # caption = "Homogeneity of variance",
+                align = c("l", rep("c", 4)),
+                escape = FALSE,
+                col.names = c(" ", "F statistic", "df1", "df2", "p-value")
+            ) %>%
+            kableExtra::kable_classic(
+                full_width = FALSE,
+                html_font = "inherit",
+                position = "left"
+            )
     }
 
     # Homogeneity text result
     output$homogeneity_text <- function() {
-        if (missing_inputs()) {
-            return(NULL)
+        req(model())
+        if (levene()$p.value[1] < 0.05) {
+            return(paste(
+                "<p>The homogeneity of variance assumption is violated. ",
+                "We can assume <i>unequal variances</i>.</p>",
+                "<p><b>Welch's ANOVA</b> recommended.</p>"
+            ))
         } else {
-            if (levene()$p.value[1] < 0.05) {
-                return(paste(
-                    "<p>The homogeneity of variance assumption is violated. ",
-                    "We can assume <i>unequal variances</i>.</p>",
-                    "<p><b>Welch's ANOVA</b> recommended.</p>"
-                ))
-            } else {
-                return(paste(
-                    "<p>The homogeneity of variance assumption is not violated. ",
-                    "We can assume <i>equal variances</i>.</p>",
-                    "<p><b>Fisher's ANOVA</b> is acceptable.</p>"
-                ))
-            }
+            return(paste(
+                "<p>The homogeneity of variance assumption is not violated. ",
+                "We can assume <i>equal variances</i>.</p>",
+                "<p><b>Fisher's ANOVA</b> is acceptable.</p>"
+            ))
         }
     }
 
     # Shapiro test
     shapiro <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            return(shapiro.test(x = residuals(model())))
-        }
+        req(model())
+        return(shapiro.test(x = residuals(model())))
     })
 
     # Perform normality test
     output$normality <- function() {
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            normality <- data.frame(
-                Test = shapiro()$method,
-                Statistic = shapiro()$statistic,
-                p.value = if (shapiro()$p.value < 0.001) {
-                    "< 0.001"
-                } else {
-                    sprintf(paste0("%.", digits, "f"), shapiro()$p.value)
-                }
-            )
+        req(model())
+        normality <- data.frame(
+            Test = shapiro()$method,
+            Statistic = shapiro()$statistic,
+            p.value = if (shapiro()$p.value < 0.001) {
+                "< 0.001"
+            } else {
+                sprintf(paste0("%.", digits, "f"), shapiro()$p.value)
+            }
+        )
 
-            normality %>%
-                dplyr::mutate_if(
-                    is.numeric,
-                    ~ sprintf(paste0("%.", digits, "f"), .)
-                ) %>%
-                knitr::kable(
-                    "html",
-                    # caption = "Normality",
-                    align = c("l", rep("c", ncol(normality) - 1)),
-                    escape = FALSE,
-                    col.names = c(" ", "W statistic", "p-value"),
-                    row.names = FALSE
-                ) %>%
-                kableExtra::kable_classic(
-                    full_width = FALSE,
-                    html_font = "inherit",
-                    position = "left"
-                )
-        }
+        normality %>%
+            dplyr::mutate_if(
+                is.numeric,
+                ~ sprintf(paste0("%.", digits, "f"), .)
+            ) %>%
+            knitr::kable(
+                "html",
+                # caption = "Normality",
+                align = c("l", rep("c", ncol(normality) - 1)),
+                escape = FALSE,
+                col.names = c(" ", "W statistic", "p-value"),
+                row.names = FALSE
+            ) %>%
+            kableExtra::kable_classic(
+                full_width = FALSE,
+                html_font = "inherit",
+                position = "left"
+            )
     }
 
     # Normality text result
     output$normality_text <- function() {
-        if (missing_inputs()) {
-            return(NULL)
+        req(model())
+        if (shapiro()$p.value < 0.05) {
+            return(paste(
+                "<p>The normality assumption is violated.",
+                "The residuals are not normally distributed.</p>",
+                "<p><b>Non-parametric tests</b> are recommended ",
+                "instead of ANOVA (e.g. Kruskal-Wallis test).</p>"
+            ))
         } else {
-            if (shapiro()$p.value < 0.05) {
-                return(paste(
-                    "<p>The normality assumption is violated.",
-                    "The residuals are not normally distributed.</p>",
-                    "<p><b>Non-parametric tests</b> are recommended ",
-                    "instead of ANOVA (e.g. Kruskal-Wallis test).</p>"
-                ))
-            } else {
-                return(paste(
-                    "<p>The normality assumption is not violated.</p>"
-                ))
-            }
+            return(paste(
+                "<p>The normality assumption is not violated.</p>"
+            ))
         }
     }
 
     # Boxplot and QQ plot
     output$boxplot <- renderPlot(
         {
-            if (missing_inputs()) {
-                return(NULL)
-            } else {
-                # Use layout
-                layout(
-                    matrix(seq.int(1, length(input$predictors) * 2),
-                        ncol = 2, byrow = TRUE
-                    )
+            req(model())
+            # Use layout
+            layout(
+                matrix(seq.int(1, length(input$predictors) * 2),
+                    ncol = 2, byrow = TRUE
+                )
+            )
+
+            # Plots
+            for (i in 1:length(input$predictors)) {
+                formula <- as.formula(paste(
+                    input$outcome,
+                    "~",
+                    input$predictors[i]
+                ))
+
+                par(cex.axis = 0.8, cex.lab = 0.8, cex.main = 0.8)
+
+                boxplot(
+                    formula = formula,
+                    data = df(),
+                    xlab = input$predictors[i],
+                    ylab = input$outcome,
+                    main = paste0("Boxplot: ", input$outcome, " by ", input$predictors[i])
                 )
 
-                # Plots
-                for (i in 1:length(input$predictors)) {
-                    formula <- as.formula(paste(
-                        input$outcome,
-                        "~",
-                        input$predictors[i]
-                    ))
-
-                    par(cex.axis = 0.8, cex.lab = 0.8, cex.main = 0.8)
-
-                    boxplot(
-                        formula = formula,
-                        data = df(),
-                        xlab = input$predictors[i],
-                        ylab = input$outcome,
-                        main = paste0("Boxplot: ", input$outcome, " by ", input$predictors[i])
-                    )
-
-                    # QQ plot of residuals
-                    qqnorm(
-                        residuals(lm(formula = formula, data = df())),
-                        main = paste0("QQ plot of residuals")
-                    )
-                    qqline(
-                        residuals(lm(formula = formula, data = df()))
-                    )
-                }
+                # QQ plot of residuals
+                qqnorm(
+                    residuals(lm(formula = formula, data = df())),
+                    main = paste0("QQ plot of residuals")
+                )
+                qqline(
+                    residuals(lm(formula = formula, data = df()))
+                )
             }
         },
         res = 100
@@ -446,145 +410,235 @@ variance_server <- function(
 
     # Overall model test
     overall_model_test <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            return(lm(formula(), data = df()))
-        }
+        req(model())
+        return(lm(formula(), data = df()))
     })
 
     # ANOVA table
     output$anova_results <- function() {
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            model <- data.frame(
-                Term = "Overall model test",
-                SS = sum(
-                    (overall_model_test()$fitted.values - mean(
-                        overall_model_test()$model[[input$outcome]]
-                    ))^2
-                ),
-                Df = summary(overall_model_test())$fstatistic[2],
-                MS = sum(
-                    (overall_model_test()$fitted.values - mean(
-                        overall_model_test()$model[[input$outcome]]
-                    ))^2
-                ) /
-                    summary(overall_model_test())$fstatistic[2],
-                F = summary(overall_model_test())$fstatistic[1],
-                p.value = pf(
-                    summary(overall_model_test())$fstatistic[1],
-                    summary(overall_model_test())$fstatistic[2],
-                    summary(overall_model_test())$fstatistic[3],
-                    lower.tail = FALSE
-                )
+        req(model())
+        model_data <- data.frame(
+            Term = "Overall model test",
+            SS = sum(
+                (overall_model_test()$fitted.values - mean(
+                    overall_model_test()$model[[input$outcome]]
+                ))^2
+            ),
+            Df = summary(overall_model_test())$fstatistic[2],
+            MS = sum(
+                (overall_model_test()$fitted.values - mean(
+                    overall_model_test()$model[[input$outcome]]
+                ))^2
+            ) /
+                summary(overall_model_test())$fstatistic[2],
+            F = summary(overall_model_test())$fstatistic[1],
+            p.value = pf(
+                summary(overall_model_test())$fstatistic[1],
+                summary(overall_model_test())$fstatistic[2],
+                summary(overall_model_test())$fstatistic[3],
+                lower.tail = FALSE
+            )
+        )
+
+        if (input$type == "Factorial ANOVA with interactions") {
+            # Use car::Anova type 3
+            model_intercept <- as.data.frame(broom::tidy(
+                car::Anova(model(), type = 3)
+            ))
+
+            # It's not only the intercept but all Type III terms
+            intercept <- data.frame(
+                Term = model_intercept[1],
+                SS = model_intercept[2],
+                Df = model_intercept[3],
+                MS = model_intercept[2] / model_intercept[3],
+                F = model_intercept[4],
+                p.value = model_intercept[5]
             )
 
-            if (input$type == "Factorial ANOVA with interactions") {
-                # Use car::Anova type 3
-                model_intercept <- as.data.frame(broom::tidy(
-                    car::Anova(model(), type = 3)
-                ))
+            colnames(intercept) <- colnames(model_data)
 
-                # It's not only the intercept but all Type III terms
-                intercept <- data.frame(
-                    Term = model_intercept[1],
-                    SS = model_intercept[2],
-                    Df = model_intercept[3],
-                    MS = model_intercept[2] / model_intercept[3],
-                    F = model_intercept[4],
-                    p.value = model_intercept[5]
-                )
+            model_data <- rbind(model_data, intercept)
+        } else {
+            # If Type III is not needed, let's use default aov model
+            model_nonintercept <- as.data.frame(broom::tidy(model()))
 
-                colnames(intercept) <- colnames(model)
+            nonintercept <- data.frame(
+                Term = model_nonintercept[1],
+                SS = model_nonintercept[3],
+                Df = model_nonintercept[2],
+                MS = model_nonintercept[4],
+                F = model_nonintercept[5],
+                p.value = model_nonintercept[6]
+            )
 
-                model <- rbind(model, intercept)
-            } else {
-                # If Type III is not needed, let's use default aov model
-                model_nonintercept <- as.data.frame(broom::tidy(model()))
+            colnames(nonintercept) <- colnames(model_data)
 
-                nonintercept <- data.frame(
-                    Term = model_nonintercept[1],
-                    SS = model_nonintercept[3],
-                    Df = model_nonintercept[2],
-                    MS = model_nonintercept[4],
-                    F = model_nonintercept[5],
-                    p.value = model_nonintercept[6]
-                )
-
-                colnames(nonintercept) <- colnames(model)
-
-                model <- rbind(model, nonintercept)
-            }
-
-            model %>%
-                dplyr::mutate_if(
-                    is.numeric,
-                    ~ sprintf(paste0("%.", digits, "f"), .)
-                ) %>%
-                knitr::kable(
-                    "html",
-                    # caption = "ANOVA (parametric)",
-                    align = c("l", rep("c", 5)),
-                    escape = FALSE,
-                    col.names = c(
-                        " ", "Sum of Squares", "Df",
-                        "Mean Square",
-                        "F", "p-value"
-                    ),
-                    row.names = FALSE
-                ) %>%
-                kableExtra::kable_classic(
-                    full_width = FALSE,
-                    html_font = "inherit",
-                    position = "left"
-                )
+            model_data <- rbind(model_data, nonintercept)
         }
+
+        model_data %>%
+            dplyr::mutate_if(
+                is.numeric,
+                ~ sprintf(paste0("%.", digits, "f"), .)
+            ) %>%
+            knitr::kable(
+                "html",
+                # caption = "ANOVA (parametric)",
+                align = c("l", rep("c", 5)),
+                escape = FALSE,
+                col.names = c(
+                    " ", "Sum of Squares", "Df",
+                    "Mean Square",
+                    "F", "p-value"
+                ),
+                row.names = FALSE
+            ) %>%
+            kableExtra::kable_classic(
+                full_width = FALSE,
+                html_font = "inherit",
+                position = "left"
+            )
     }
 
     # Welch's ANOVA
     output$anova_results_welch <- function() {
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            # Use oneway.test (Welch's
-            model <- oneway.test(formula(), data = df(), var.equal = FALSE)
-            effect_eta <- effectsize::eta_squared(model, partial = FALSE, verbose = FALSE)
-            effect_omega <- effectsize::omega_squared(model, partial = FALSE, verbose = FALSE)
+        req(model())
+        # Use oneway.test (Welch's
+        welch_model <- oneway.test(formula(), data = df(), var.equal = FALSE)
+        effect_eta <- effectsize::eta_squared(welch_model, partial = FALSE, verbose = FALSE)
+        effect_omega <- effectsize::omega_squared(welch_model, partial = FALSE, verbose = FALSE)
 
-            welchanova <- data.frame(
-                Term = "Overall model",
-                F = model$statistic,
-                df1 = model$parameter[1],
-                df2 = model$parameter[2],
-                p.value = model$p.value,
-                eta_squared = effect_eta[, 1],
-                eta_squared_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), effect_eta[, 3]),
-                    sprintf(paste0("%.", digits, "f"), effect_eta[, 4]),
-                    sep = "–"
-                ),
-                omega_squared = effect_omega[, 1],
-                omega_squared_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), effect_omega[, 3]),
-                    sprintf(paste0("%.", digits, "f"), effect_omega[, 4]),
-                    sep = "–"
-                )
+        welchanova <- data.frame(
+            Term = "Overall model",
+            F = welch_model$statistic,
+            df1 = welch_model$parameter[1],
+            df2 = welch_model$parameter[2],
+            p.value = welch_model$p.value,
+            eta_squared = effect_eta[, 1],
+            eta_squared_CI = paste(
+                sprintf(paste0("%.", digits, "f"), effect_eta[, 3]),
+                sprintf(paste0("%.", digits, "f"), effect_eta[, 4]),
+                sep = "–"
+            ),
+            omega_squared = effect_omega[, 1],
+            omega_squared_CI = paste(
+                sprintf(paste0("%.", digits, "f"), effect_omega[, 3]),
+                sprintf(paste0("%.", digits, "f"), effect_omega[, 4]),
+                sep = "–"
             )
+        )
 
-            welchanova %>%
+        welchanova %>%
+            dplyr::mutate_if(
+                is.numeric,
+                ~ sprintf(paste0("%.", digits, "f"), .)
+            ) %>%
+            knitr::kable(
+                "html",
+                # caption = "ANOVA (Welch's)",
+                align = c("l", rep("c", 8)),
+                col.names = c(
+                    " ", "F", "df1", "df2", "p-value",
+                    "η²", "95% CI", "ω²", "95% CI"
+                ),
+                row.names = FALSE
+            ) %>%
+            kableExtra::kable_classic(
+                full_width = FALSE,
+                html_font = "inherit",
+                position = "left"
+            ) %>%
+            kableExtra::add_header_above(c(
+                " " = 1,
+                "Welch's ANOVA" = 4,
+                "Eta squared" = 2,
+                "Omega squared" = 2
+            )) %>%
+            kableExtra::add_header_above(c(
+                " " = 5,
+                "Effect size" = 4
+            ))
+    }
+
+    # ANOVA effect sizes
+    output$anova_effect_sizes <- function() {
+        req(model())
+        # Show eta squared, partial eta squared, and omega squared
+        eta_sq <- effectsize::eta_squared(
+            model(),
+            partial = FALSE, verbose = FALSE
+        )
+        partial_eta_sq <- effectsize::eta_squared(
+            model(),
+            partial = TRUE, verbose = FALSE
+        )
+        omega_sq <- effectsize::omega_squared(
+            model(),
+            partial = FALSE, verbose = FALSE
+        )
+        partial_omega_sq <- effectsize::omega_squared(
+            model(),
+            partial = TRUE, verbose = FALSE
+        )
+
+        # Combine the effect sizes into a data frame
+        effect_sizes <- data.frame(
+            Term = eta_sq[1],
+            Eta2 = eta_sq[2],
+            Eta2_CI = paste(
+                sprintf(paste0("%.", digits, "f"), eta_sq[, 4]),
+                sprintf(paste0("%.", digits, "f"), eta_sq[, 5]),
+                sep = "–"
+            ),
+            Eta2_interp = effectsize::interpret(eta_sq, rules = "field2013")[6],
+            Eta2p = partial_eta_sq[2],
+            Eta2p_CI = paste(
+                sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 4]),
+                sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 5]),
+                sep = "–"
+            ),
+            Eta2p_interp = effectsize::interpret(partial_eta_sq, rules = "field2013")[6],
+            Omega2 = omega_sq[2],
+            Omega2_CI = paste(
+                sprintf(paste0("%.", digits, "f"), omega_sq[, 4]),
+                sprintf(paste0("%.", digits, "f"), omega_sq[, 5]),
+                sep = "–"
+            ),
+            Omega2_interp = effectsize::interpret(omega_sq, rules = "field2013")[6],
+            Omega2p = partial_omega_sq[2],
+            Omega2p_CI = paste(
+                sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 4]),
+                sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 5]),
+                sep = "–"
+            ),
+            Omega2p_interp = effectsize::interpret(partial_omega_sq, rules = "field2013")[6]
+        )
+
+        colnames(effect_sizes) <- c(
+            "Term", "Eta2", "Eta2_CI", "Eta2_interp",
+            "Eta2p", "Eta2p_CI", "Eta2p_interp",
+            "Omega2", "Omega2_CI", "Omega2_interp",
+            "Omega2p", "Omega2p_CI", "Omega2p_interp"
+        )
+
+        # Return the data frame
+        if (length(input$predictors) < 2) {
+            display_effect_sizes <- effect_sizes[c(
+                "Term", "Eta2", "Eta2_CI", "Eta2_interp",
+                "Omega2", "Omega2_CI", "Omega2_interp"
+            )] %>%
                 dplyr::mutate_if(
                     is.numeric,
                     ~ sprintf(paste0("%.", digits, "f"), .)
                 ) %>%
                 knitr::kable(
                     "html",
-                    # caption = "ANOVA (Welch's)",
                     align = c("l", rep("c", 8)),
+                    escape = FALSE,
                     col.names = c(
-                        " ", "F", "df1", "df2", "p-value",
-                        "η²", "95% CI", "ω²", "95% CI"
+                        " ", "η²", "95% CI", " ",
+                        "ω²", "95% CI", " "
                     ),
                     row.names = FALSE
                 ) %>%
@@ -595,206 +649,96 @@ variance_server <- function(
                 ) %>%
                 kableExtra::add_header_above(c(
                     " " = 1,
-                    "Welch's ANOVA" = 4,
-                    "Eta squared" = 2,
-                    "Omega squared" = 2
-                )) %>%
-                kableExtra::add_header_above(c(
-                    " " = 5,
-                    "Effect size" = 4
+                    "Eta squared" = 3,
+                    "Omega squared" = 3
                 ))
-        }
-    }
-
-    # ANOVA effect sizes
-    output$anova_effect_sizes <- function() {
-        if (missing_inputs()) {
-            return(NULL)
         } else {
-            # Show eta squared, partial eta squared, and omega squared
-            eta_sq <- effectsize::eta_squared(
-                model(),
-                partial = FALSE, verbose = FALSE
-            )
-            partial_eta_sq <- effectsize::eta_squared(
-                model(),
-                partial = TRUE, verbose = FALSE
-            )
-            omega_sq <- effectsize::omega_squared(
-                model(),
-                partial = FALSE, verbose = FALSE
-            )
-            partial_omega_sq <- effectsize::omega_squared(
-                model(),
-                partial = TRUE, verbose = FALSE
-            )
-
-            # Combine the effect sizes into a data frame
-            effect_sizes <- data.frame(
-                Term = eta_sq[1],
-                Eta2 = eta_sq[2],
-                Eta2_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), eta_sq[, 4]),
-                    sprintf(paste0("%.", digits, "f"), eta_sq[, 5]),
-                    sep = "–"
-                ),
-                Eta2_interp = effectsize::interpret(eta_sq, rules = "field2013")[6],
-                Eta2p = partial_eta_sq[2],
-                Eta2p_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 4]),
-                    sprintf(paste0("%.", digits, "f"), partial_eta_sq[, 5]),
-                    sep = "–"
-                ),
-                Eta2p_interp = effectsize::interpret(partial_eta_sq, rules = "field2013")[6],
-                Omega2 = omega_sq[2],
-                Omega2_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), omega_sq[, 4]),
-                    sprintf(paste0("%.", digits, "f"), omega_sq[, 5]),
-                    sep = "–"
-                ),
-                Omega2_interp = effectsize::interpret(omega_sq, rules = "field2013")[6],
-                Omega2p = partial_omega_sq[2],
-                Omega2p_CI = paste(
-                    sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 4]),
-                    sprintf(paste0("%.", digits, "f"), partial_omega_sq[, 5]),
-                    sep = "–"
-                ),
-                Omega2p_interp = effectsize::interpret(partial_omega_sq, rules = "field2013")[6]
-            )
-
-            colnames(effect_sizes) <- c(
-                "Term", "Eta2", "Eta2_CI", "Eta2_interp",
-                "Eta2p", "Eta2p_CI", "Eta2p_interp",
-                "Omega2", "Omega2_CI", "Omega2_interp",
-                "Omega2p", "Omega2p_CI", "Omega2p_interp"
-            )
-
-            # Return the data frame
-            if (length(input$predictors) < 2) {
-                display_effect_sizes <- effect_sizes[c(
-                    "Term", "Eta2", "Eta2_CI", "Eta2_interp",
-                    "Omega2", "Omega2_CI", "Omega2_interp"
-                )] %>%
-                    dplyr::mutate_if(
-                        is.numeric,
-                        ~ sprintf(paste0("%.", digits, "f"), .)
-                    ) %>%
-                    knitr::kable(
-                        "html",
-                        align = c("l", rep("c", 8)),
-                        escape = FALSE,
-                        col.names = c(
-                            " ", "η²", "95% CI", " ",
-                            "ω²", "95% CI", " "
-                        ),
-                        row.names = FALSE
-                    ) %>%
-                    kableExtra::kable_classic(
-                        full_width = FALSE,
-                        html_font = "inherit",
-                        position = "left"
-                    ) %>%
-                    kableExtra::add_header_above(c(
-                        " " = 1,
-                        "Eta squared" = 3,
-                        "Omega squared" = 3
-                    ))
-            } else {
-                display_effect_sizes <- effect_sizes %>%
-                    dplyr::mutate_if(
-                        is.numeric,
-                        ~ sprintf(paste0("%.", digits, "f"), .)
-                    ) %>%
-                    knitr::kable(
-                        "html",
-                        align = c("l", rep("c", 12)),
-                        escape = FALSE,
-                        col.names = c(
-                            " ", "η²", "95% CI", " ",
-                            "η²p", "95% CI", " ",
-                            "ω²", "95% CI", " ",
-                            "ω²p", "95% CI", " "
-                        ),
-                        row.names = FALSE
-                    ) %>%
-                    kableExtra::kable_classic(
-                        full_width = FALSE,
-                        html_font = "inherit",
-                        position = "left"
-                    ) %>%
-                    kableExtra::add_header_above(c(
-                        " " = 1,
-                        "Eta squared" = 3,
-                        "Partial eta sq." = 3,
-                        "Omega squared" = 3,
-                        "Partial omega sq." = 3
-                    ))
-            }
-
-            return(display_effect_sizes %>%
-                kableExtra::footnote(
-                    general_title = "Note on interpretation:",
-                    general = paste(
-                        "Effect size interpretation follows Field (2013). <br>",
-                        "Other researchers follow Cohen's (1992) recommendations."
+            display_effect_sizes <- effect_sizes %>%
+                dplyr::mutate_if(
+                    is.numeric,
+                    ~ sprintf(paste0("%.", digits, "f"), .)
+                ) %>%
+                knitr::kable(
+                    "html",
+                    align = c("l", rep("c", 12)),
+                    escape = FALSE,
+                    col.names = c(
+                        " ", "η²", "95% CI", " ",
+                        "η²p", "95% CI", " ",
+                        "ω²", "95% CI", " ",
+                        "ω²p", "95% CI", " "
                     ),
-                    escape = FALSE
+                    row.names = FALSE
+                ) %>%
+                kableExtra::kable_classic(
+                    full_width = FALSE,
+                    html_font = "inherit",
+                    position = "left"
+                ) %>%
+                kableExtra::add_header_above(c(
+                    " " = 1,
+                    "Eta squared" = 3,
+                    "Partial eta sq." = 3,
+                    "Omega squared" = 3,
+                    "Partial omega sq." = 3
                 ))
         }
+
+        return(display_effect_sizes %>%
+            kableExtra::footnote(
+                general_title = "Note on interpretation:",
+                general = paste(
+                    "Effect size interpretation follows Field (2013). <br>",
+                    "Other researchers follow Cohen's (1992) recommendations."
+                ),
+                escape = FALSE
+            ))
     }
 
     # Text output
     output$results_text <- renderText({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            report::report_text(model()) %>%
-                # replace "Eta2" with html eta symbol and squared symbol
-                gsub("Eta2", "\u03B7\u00B2", .)
-        }
+        req(model())
+        report::report_text(model()) %>%
+            # replace "Eta2" with html eta symbol and squared symbol
+            gsub("Eta2", "\u03B7\u00B2", .)
     })
 
     # Kruskal-Wallis test for non-parametric data
     kruskal <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            kruskal <- list()
-            # Run the test for each factor
-            for (i in 1:length(input$predictors)) {
-                kruskal[[i]] <- kruskal.test(
-                    as.formula(paste0(
-                        input$outcome, " ~ ", input$predictors[[i]]
-                    )),
-                    data = df()
-                )
-            }
-            return(kruskal)
+        req(model())
+        kruskal <- list()
+        # Run the test for each factor
+        for (i in 1:length(input$predictors)) {
+            kruskal[[i]] <- kruskal.test(
+                as.formula(paste0(
+                    input$outcome, " ~ ", input$predictors[[i]]
+                )),
+                data = df()
+            )
         }
+        return(kruskal)
     })
 
     # Effect size for Kruskal-Wallis test
     epsilon2_kw <- reactive({
-        if (missing_inputs()) {
-            return(NULL)
-        } else {
-            epsilon2_kw <- list()
-            # Run the test for each factor
-            for (i in 1:length(input$predictors)) {
-                epsilon2_kw[[i]] <- effectsize::rank_epsilon_squared(
-                    as.formula(paste0(
-                        input$outcome, " ~ ", input$predictors[[i]]
-                    )),
-                    data = df(),
-                    verbose = FALSE
-                )
-            }
-            return(epsilon2_kw)
+        req(model())
+        epsilon2_kw <- list()
+        # Run the test for each factor
+        for (i in 1:length(input$predictors)) {
+            epsilon2_kw[[i]] <- effectsize::rank_epsilon_squared(
+                as.formula(paste0(
+                    input$outcome, " ~ ", input$predictors[[i]]
+                )),
+                data = df(),
+                verbose = FALSE
+            )
         }
+        return(epsilon2_kw)
     })
 
     # Kruksal-Wallis table
     output$kruskal_table <- function() {
+        req(model())
         kruskal_table <- data.frame()
         # If kruskal() is not null, then ...
         if (length(kruskal()) > 0) {
@@ -854,6 +798,7 @@ variance_server <- function(
 
     # Which post-hoc terms to display
     observeEvent(input$predictors, {
+        req(model())
         # Generate a list of selected predictors and their interaction terms
         #  First, unlist all the predictors
         selected_terms <- unlist(input$predictors)
@@ -878,106 +823,100 @@ variance_server <- function(
     # Tukey's HSD test
     output$tukey_hsd_table <- function() {
         # Based on the selected post-hoc terms, run Tukey's HSD test
-        if (
-            missing_inputs() ||
-                length(input$posthoc_terms) < 1
-        ) {
-            return(NULL)
-        } else {
-            req(input$posthoc_terms)
-            tukey <- as.data.frame(TukeyHSD(model(),
-                which = input$posthoc_terms
-            )[[1]]) %>%
-                tibble::rownames_to_column(var = "terms")
+        req(model(), input$posthoc_terms)
 
-            # Split terms into groups by – first using unnest
+        tukey <- as.data.frame(TukeyHSD(model(),
+            which = input$posthoc_terms
+        )[[1]]) %>%
+            tibble::rownames_to_column(var = "terms")
+
+        # Split terms into groups by – first using unnest
+        tukey <- tukey %>%
+            tidyr::separate(
+                terms,
+                c("group1", "group2"),
+                sep = "-"
+            ) %>%
+            tidyr::unnest(cols = c(group1, group2))
+
+        # If there are interactions, split the groups into their components
+        if (grepl(":", tukey$group1[1])) {
             tukey <- tukey %>%
                 tidyr::separate(
-                    terms,
-                    c("group1", "group2"),
-                    sep = "-"
+                    group1,
+                    c("term1a", "term2a"),
+                    sep = ":"
                 ) %>%
-                tidyr::unnest(cols = c(group1, group2))
-
-            # If there are interactions, split the groups into their components
-            if (grepl(":", tukey$group1[1])) {
-                tukey <- tukey %>%
-                    tidyr::separate(
-                        group1,
-                        c("term1a", "term2a"),
-                        sep = ":"
-                    ) %>%
-                    tidyr::separate(
-                        group2,
-                        c("term1b", "term2b"),
-                        sep = ":"
-                    ) %>%
-                    tidyr::unnest(cols = c(term1a, term2a, term1b, term2b))
-            }
-
-            # Re-order columns based on their values and rename
-            if ("term1a" %in% names(tukey)) {
-                # Arrange data
-                tukey <- tukey %>%
-                    dplyr::arrange(term1a, term2a)
-            } else {
-                tukey <- tukey %>%
-                    dplyr::arrange(group1, group2)
-            }
-
-            # Split the input$posthoc_terms into two at the first :
-            term_names <- unlist(strsplit(input$posthoc_terms, ":"))
-
-            # Create col_names for the overall table
-            #  If group1 exists, use term_names[1] for both group1 and group2
-            if ("group1" %in% names(tukey)) {
-                col_names <- c(
-                    term_names[1],
-                    term_names[1]
-                )
-                compa <- 2
-            } else {
-                col_names <- c(
-                    term_names[1],
-                    term_names[2],
-                    term_names[1],
-                    term_names[2]
-                )
-                compa <- 4
-            }
-
-            col_names <- c(
-                col_names,
-                "Mean Difference",
-                "Lower Bound",
-                "Upper Bound",
-                "p-value"
-            )
-
-            tukey %>%
-                dplyr::mutate_if(
-                    is.numeric,
-                    ~ sprintf(paste0("%.", digits, "f"), .)
+                tidyr::separate(
+                    group2,
+                    c("term1b", "term2b"),
+                    sep = ":"
                 ) %>%
-                knitr::kable(
-                    "html",
-                    caption = "Tukey's HSD test (equal variances assumed)",
-                    align = c("l", rep("c", 5)),
-                    escape = FALSE,
-                    row.names = FALSE,
-                    col.names = col_names
-                ) %>%
-                kableExtra::kable_classic(
-                    full_width = FALSE,
-                    html_font = "inherit",
-                    position = "left"
-                ) %>%
-                kableExtra::add_header_above(
-                    c(
-                        "Comparison" = compa,
-                        " " = 4
-                    )
-                )
+                tidyr::unnest(cols = c(term1a, term2a, term1b, term2b))
         }
+
+        # Re-order columns based on their values and rename
+        if ("term1a" %in% names(tukey)) {
+            # Arrange data
+            tukey <- tukey %>%
+                dplyr::arrange(term1a, term2a)
+        } else {
+            tukey <- tukey %>%
+                dplyr::arrange(group1, group2)
+        }
+
+        # Split the input$posthoc_terms into two at the first :
+        term_names <- unlist(strsplit(input$posthoc_terms, ":"))
+
+        # Create col_names for the overall table
+        #  If group1 exists, use term_names[1] for both group1 and group2
+        if ("group1" %in% names(tukey)) {
+            col_names <- c(
+                term_names[1],
+                term_names[1]
+            )
+            compa <- 2
+        } else {
+            col_names <- c(
+                term_names[1],
+                term_names[2],
+                term_names[1],
+                term_names[2]
+            )
+            compa <- 4
+        }
+
+        col_names <- c(
+            col_names,
+            "Mean Difference",
+            "Lower Bound",
+            "Upper Bound",
+            "p-value"
+        )
+
+        tukey %>%
+            dplyr::mutate_if(
+                is.numeric,
+                ~ sprintf(paste0("%.", digits, "f"), .)
+            ) %>%
+            knitr::kable(
+                "html",
+                caption = "Tukey's HSD test (equal variances assumed)",
+                align = c("l", rep("c", 5)),
+                escape = FALSE,
+                row.names = FALSE,
+                col.names = col_names
+            ) %>%
+            kableExtra::kable_classic(
+                full_width = FALSE,
+                html_font = "inherit",
+                position = "left"
+            ) %>%
+            kableExtra::add_header_above(
+                c(
+                    "Comparison" = compa,
+                    " " = 4
+                )
+            )
     }
 }

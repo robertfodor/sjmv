@@ -128,13 +128,12 @@ regression_ui <- function(id) {
                         )
                     ),
                     fluidRow(
-                      column(
-                        width = 12,
-                        # A single UI placeholder for all diagnostic output
-                        uiOutput(ns("diagnostic_output_ui"))
-                      )
+                        column(
+                            width = 12,
+                            # A single UI placeholder for all diagnostic output
+                            uiOutput(ns("diagnostic_output_ui"))
+                        )
                     )
-                   
                 )
             )
         )
@@ -225,28 +224,32 @@ regression_server <- function(
 
     # Model
     models <- reactive({
-        if (empty_predictors() == FALSE) {
-            # Create a list of models
-            models <- list()
-            # Build a model for each block
-            for (i in 1:input$blocks) {
-                models[[i]] <-
-                    lm(
-                        formula = as.formula(paste0(
-                            input$outcome, " ~ ",
-                            paste0(
-                                # Predictors are cumulative
-                                unlist(predictors()[1:i]),
-                                collapse = " + "
-                            )
-                        )),
-                        data = df()
-                    )
-            }
+        # VALIDATION: Check for outcome and predictor variables
+        shiny::validate(
+            shiny::need(input$outcome, "Kérem, válasszon ki egy kimeneti (függő) változót."),
+            shiny::need(empty_predictors() == FALSE, "Kérem, válasszon ki legalább egy prediktor változót.")
+        )
 
-            # Return a list of models
-            return(models)
+        # Create a list of models
+        models <- list()
+        # Build a model for each block
+        for (i in 1:input$blocks) {
+            models[[i]] <-
+                lm(
+                    formula = as.formula(paste0(
+                        input$outcome, " ~ ",
+                        paste0(
+                            # Predictors are cumulative
+                            unlist(predictors()[1:i]),
+                            collapse = " + "
+                        )
+                    )),
+                    data = df()
+                )
         }
+
+        # Return a list of models
+        return(models)
     })
 
     # Model fit measures for each block in a table. Each row is a model.
@@ -596,112 +599,119 @@ regression_server <- function(
         # Store the results in the reactiveVal
         diagnostic_results(results)
     })
-    
+
     # --- PASTE THIS NEW CODE IN ITS PLACE ---
-    
+
     # 3. Generate the UI Placeholders for all diagnostic output
     output$diagnostic_output_ui <- renderUI({
-      req(diagnostic_results())
-      ns <- session$ns
-      
-      # We need to check which results have data to display
-      # This includes tests that ran but found no outliers
-      all_tests_run <- names(diagnostic_results()$cutoffs)
-      
-      # Create UI for each test that was run
-      tag_list <- lapply(all_tests_run, function(name) {
-        results_list <- diagnostic_results()$results
-        title <- case_when(
-          name == "cooks_distance" ~ "Cook's Distance Outliers",
-          name == "dfbeta" ~ "DFBETA Influential Points",
-          name == "leverage" ~ "High Leverage Points",
-          name == "mahalanobis" ~ "Mahalanobis Distance Outliers",
-          TRUE ~ name
-        )
-        
-        # Check if this test found any outliers
-        if (name %in% names(results_list) && nrow(results_list[[name]]$data) > 0) {
-          # If yes, create placeholder for table and note
-          tagList(
-            h4(title),
-            tableOutput(ns(paste0("diag_table_", name))),
-            uiOutput(ns(paste0("diag_note_", name)))
-          )
-        } else {
-          # If no outliers found, just show the note
-          tagList(
-            h4(title),
-            p("No outliers were detected using the following cutoff:"),
-            uiOutput(ns(paste0("diag_note_", name)))
-          )
+        req(diagnostic_results())
+        ns <- session$ns
+
+        # We need to check which results have data to display
+        # This includes tests that ran but found no outliers
+        all_tests_run <- names(diagnostic_results()$cutoffs)
+
+        # Create UI for each test that was run
+        tag_list <- lapply(all_tests_run, function(name) {
+            results_list <- diagnostic_results()$results
+            title <- case_when(
+                name == "cooks_distance" ~ "Cook's Distance Outliers",
+                name == "dfbeta" ~ "DFBETA Influential Points",
+                name == "leverage" ~ "High Leverage Points",
+                name == "mahalanobis" ~ "Mahalanobis Distance Outliers",
+                TRUE ~ name
+            )
+
+            # Check if this test found any outliers
+            if (name %in% names(results_list) && nrow(results_list[[name]]$data) > 0) {
+                # If yes, create placeholder for table and note
+                tagList(
+                    h4(title),
+                    tableOutput(ns(paste0("diag_table_", name))),
+                    uiOutput(ns(paste0("diag_note_", name)))
+                )
+            } else {
+                # If no outliers found, just show the note
+                tagList(
+                    h4(title),
+                    p("No outliers were detected using the following cutoff:"),
+                    uiOutput(ns(paste0("diag_note_", name)))
+                )
+            }
+        })
+
+        # Create plot placeholders
+        plots_list <- diagnostic_results()$plots
+        plot_tags <- NULL
+        if (input$show_plots && length(plots_list) > 0) {
+            plot_tags <- tagList(
+                h3("Diagnostic Plots"),
+                lapply(names(plots_list), function(name) {
+                    plotOutput(ns(paste0("diag_plot_", name)))
+                })
+            )
         }
-      })
-      
-      # Create plot placeholders
-      plots_list <- diagnostic_results()$plots
-      plot_tags <- NULL
-      if(input$show_plots && length(plots_list) > 0) {
-        plot_tags <- tagList(
-          h3("Diagnostic Plots"),
-          lapply(names(plots_list), function(name) {
-            plotOutput(ns(paste0("diag_plot_", name)))
-          })
+
+        # Combine everything into boxes
+        tagList(
+            box(title = "Advanced Diagnostics Results", status = "info", solidHeader = TRUE, width = 12, tag_list),
+            if (!is.null(plot_tags)) {
+                box(title = "Diagnostic Plots", status = "info", solidHeader = TRUE, width = 12, collapsible = TRUE, plot_tags)
+            }
         )
-      }
-      
-      # Combine everything into boxes
-      tagList(
-        box(title = "Advanced Diagnostics Results", status = "info", solidHeader = TRUE, width = 12, tag_list),
-        if (!is.null(plot_tags)) {
-          box(title = "Diagnostic Plots", status = "info", solidHeader = TRUE, width = 12, collapsible = TRUE, plot_tags)
-        }
-      )
     })
-    
+
     # 4. Create the Renderers in a separate observer
     observe({
-      req(diagnostic_results())
-      results_list <- diagnostic_results()$results
-      plots_list <- diagnostic_results()$plots
-      formulas_list <- diagnostic_results()$formulas
-      cutoffs_list <- diagnostic_results()$cutoffs
-      
-      # Create renderers for all tests that were run
-      for (name in names(cutoffs_list)) {
-        local({
-          my_name <- name
-          
-          # Create table renderer if there is data
-          if (my_name %in% names(results_list) && nrow(results_list[[my_name]]$data) > 0) {
-            my_data <- results_list[[my_name]]$data
-            output[[paste0("diag_table_", my_name)]] <- renderTable({ my_data }, digits = digits)
-          }
-          
-          # Create note renderer
-          my_formula <- formulas_list[[my_name]]
-          my_cutoff <- cutoffs_list[[my_name]]
-          output[[paste0("diag_note_", my_name)]] <- renderUI({
-            # Wrap with withMathJax() to ensure dynamic LaTeX is rendered
-            withMathJax(
-              helpText(HTML(paste(
-                my_formula,
-                "<br><em>Calculated Cutoff:</em>",
-                round(my_cutoff, 4)
-              )))
-            )
-          })
-        })
-      }
-      
-      # Create plot renderers
-      if (input$show_plots && length(plots_list) > 0) {
-        for (name in names(plots_list)) {
-          local({
-            my_name <- name
-            my_plot <- plots_list[[my_name]]
-            output[[paste0("diag_plot_", my_name)]] <- renderPlot({ my_plot })
-          })
+        req(diagnostic_results())
+        results_list <- diagnostic_results()$results
+        plots_list <- diagnostic_results()$plots
+        formulas_list <- diagnostic_results()$formulas
+        cutoffs_list <- diagnostic_results()$cutoffs
+
+        # Create renderers for all tests that were run
+        for (name in names(cutoffs_list)) {
+            local({
+                my_name <- name
+
+                # Create table renderer if there is data
+                if (my_name %in% names(results_list) && nrow(results_list[[my_name]]$data) > 0) {
+                    my_data <- results_list[[my_name]]$data
+                    output[[paste0("diag_table_", my_name)]] <- renderTable(
+                        {
+                            my_data
+                        },
+                        digits = digits
+                    )
+                }
+
+                # Create note renderer
+                my_formula <- formulas_list[[my_name]]
+                my_cutoff <- cutoffs_list[[my_name]]
+                output[[paste0("diag_note_", my_name)]] <- renderUI({
+                    # Wrap with withMathJax() to ensure dynamic LaTeX is rendered
+                    withMathJax(
+                        helpText(HTML(paste(
+                            my_formula,
+                            "<br><em>Calculated Cutoff:</em>",
+                            round(my_cutoff, 4)
+                        )))
+                    )
+                })
+            })
         }
-      }
+
+        # Create plot renderers
+        if (input$show_plots && length(plots_list) > 0) {
+            for (name in names(plots_list)) {
+                local({
+                    my_name <- name
+                    my_plot <- plots_list[[my_name]]
+                    output[[paste0("diag_plot_", my_name)]] <- renderPlot({
+                        my_plot
+                    })
+                })
+            }
+        }
     })
 }

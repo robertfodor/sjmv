@@ -286,9 +286,14 @@ descriptive_server <- function(input, output, session,
 
     # Data source
     df <- reactive({
+        # VALIDATION: Check if any variables are selected
+        shiny::validate(
+            shiny::need(length(input$var) > 0, "Kérem, válasszon ki legalább egy változót az elemzéshez.")
+        )
+
         # Check the input$var items exists in non_factor_variables
         #   and there is at least 1 item selected
-        if (length(input$var) > 0 && all(input$var %in% non_factor_variables)) {
+        if (all(input$var %in% non_factor_variables)) {
             # Return the selected variables from the data frame
             file_input$df %>%
                 dplyr::select(input$var)
