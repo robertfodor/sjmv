@@ -8,98 +8,45 @@ library(shinyWidgets)
 
 
 # Load dashboard tabs
-source("modules/getting_started.R") # Welcome and data import
-source("modules/descriptive.R") # Descriptive statistics
-source("modules/regression.R") # Regression analysis
-source("modules/variance.R") # Variance analysis
-source("R/diagnostics.R") # Regression diagnostics
+source("modules/getting_started.R")
+source("modules/descriptive.R")
+source("modules/correlation.R")
+source("modules/plots.R")
+source("modules/regression.R")
+source("modules/variance.R")
+source("R/diagnostics.R")
+source("R/variance_helpers.R")
+source("R/themes.R")
 
 # Define UI for application
 ui <- dashboardPage(
-  header = dashboardHeader(
-    title = "SJMV"
-  ),
+  header = dashboardHeader(title = "SJMV"),
   sidebar = dashboardSidebar(
     sidebarMenu(
-      # This allows to show which tabName is selected
       id = "tabs",
+      menuItem(text = "Getting started", tabName = "getting_started", icon = icon("home")),
+      menuItem(text = "Descriptive Statistics", icon = icon(name = "table"), tabName = "descriptive"),
+      menuItem(text = "Plots", icon = icon(name = "chart-pie"), tabName = "plots"),
+      menuItem(text = "Correlation", icon = icon(name = "th"), tabName = "correlation"),
+      menuItem(text = "Regression Analysis", icon = icon(name = "line-chart"), tabName = "regression"),
+      menuItem(text = "Variance Analysis", icon = icon(name = "bar-chart"), tabName = "variance"),
+      menuItem(text = "About", icon = icon(name = "info-circle"), tabName = "about"),
       menuItem(
-        text = "Getting started",
-        tabName = "getting_started",
-        icon = icon(name = "home")
-      ),
-      menuItem(
-        text = "Descriptive Statistics",
-        icon = icon(name = "table"),
-        tabName = "descriptive"
-      ),
-      menuItem(
-        text = "Regression Analysis",
-        icon = icon(name = "line-chart"),
-        tabName = "regression"
-      ),
-      menuItem(
-        text = "Variance Analysis",
-        icon = icon(name = "bar-chart"),
-        tabName = "variance"
-      ),
-      menuItem(
-        text = "About",
-        icon = icon(name = "info-circle"),
-        tabName = "about"
-      ),
-      menuItem(
-        text = "Settings",
-        icon = icon(name = "cog"),
-        sliderTextInput(
-          inputId = "digits",
-          label = "Decimal places for numbers:",
-          choices = seq(2, 6, 1),
-          grid = TRUE,
-          selected = 3
-        ),
-        sliderTextInput(
-          inputId = "p_value_digits",
-          label = "Decimal places for significance:",
-          choices = seq(2, 6, 1),
-          grid = TRUE,
-          selected = 3
-        ),
-        numericInput(
-          inputId = "ci",
-          label = "Confidence interval (%):",
-          value = 95,
-          min = 0,
-          max = 100,
-          step = 1
-        )
+        text = "Settings", icon = icon(name = "cog"),
+        sliderTextInput(inputId = "digits", label = "Decimal places for numbers:", choices = seq(2, 6, 1), grid = TRUE, selected = 3),
+        sliderTextInput(inputId = "p_value_digits", label = "Decimal places for significance:", choices = seq(2, 6, 1), grid = TRUE, selected = 3)
       )
     )
   ),
   body = dashboardBody(
-    # Custom CSS
-    tags$head(tags$link(
-      rel = "stylesheet",
-      type = "text/css",
-      href = "customsmjv.css"
-    )),
+    tags$head(tags$link(rel = "stylesheet", type = "text/css", href = "customsmjv.css")),
     tabItems(
-      tabItem(
-        tabName = "getting_started",
-        getting_started_ui("getting_started")
-      ),
-      tabItem(
-        tabName = "descriptive",
-        descriptive_ui("descriptive")
-      ),
-      tabItem(
-        tabName = "regression",
-        regression_ui("regression")
-      ),
-      tabItem(
-        tabName = "variance",
-        variance_ui("variance")
-      )
+      tabItem(tabName = "getting_started", getting_started_ui("getting_started")),
+      tabItem(tabName = "descriptive", descriptive_ui("descriptive")),
+      tabItem(tabName = "plots", plots_ui("plots")),
+      tabItem(tabName = "correlation", correlation_ui("correlation")),
+      tabItem(tabName = "regression", regression_ui("regression")),
+      tabItem(tabName = "variance", variance_ui("variance"))
     )
   ),
   skin = "black"
@@ -107,73 +54,36 @@ ui <- dashboardPage(
 
 # Define server logic
 server <- function(input, output, session) {
-  # Call modules
-  #  Input: Getting Started
-  # A 'file_input' mostantól egy reactiveValues objektum, ami tartalmazza a df_raw és df_filtered adatokat
-  file_input <- callModule(
-    module = getting_started_server,
-    id = "getting_started"
-  )
-
-  # --- ÚJ REAKTÍV A SZŰRT ADATOKNAK ---
-  # Ez a reaktív biztosítja, hogy minden analitikai modul a szűrt adatokat használja.
-  # A file_input$df_filtered reaktív értékre figyel.
+  file_input <- callModule(module = getting_started_server, id = "getting_started")
   data_to_pass <- reactive({
-    # Biztosítjuk, hogy csak akkor fusson, ha már van adat
     req(file_input$df_filtered)
-
-    # A moduloknak egy egyszerű data.frame-et adunk át, nem a teljes reactiveValues objektumot
     list(df = file_input$df_filtered)
   })
-  # --- EDDIG ---
-
-  # Non-factor variables (a szűrt adatok alapján)
-  non_factor_variables <- reactive({
-    req(data_to_pass()$df)
-    names(data_to_pass()$df)[sapply(
-      data_to_pass()$df,
-      function(x) !inherits(x, "factor")
-    )]
+  settings <- reactive({
+    list(digits = as.numeric(input$digits), p_digits = as.numeric(input$p_value_digits))
   })
 
-  ##  Output: Descriptive statistics
-  observe(
-    if (substr(input$tabs, 1, 5) == "descr") {
-      callModule(
-        module = descriptive_server,
-        id = input$tabs,
-        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
-        non_factor_variables = non_factor_variables(),
-        digits = input$digits,
-        p_value_digits = input$p_value_digits,
-        ci_level = (input$ci / 100)
-      )
-    }
+  non_factor_variables <- reactive({
+    req(data_to_pass()$df)
+    names(data_to_pass()$df)[!sapply(data_to_pass()$df, is.factor)]
+  })
+
+  # --- MODULE SERVER LOGIC ---
+
+  callModule(
+    module = descriptive_server, id = "descriptive", file_input = data_to_pass(),
+    non_factor_variables = non_factor_variables, # FIX: Pass reactive expression, not its value
+    settings = settings
   )
 
-  ##  Output: Regression analysis
-  observe(
-    if (substr(input$tabs, 1, 5) == "regre") {
-      callModule(
-        module = regression_server,
-        id = input$tabs,
-        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
-        digits = input$digits
-      )
-    }
-  )
+  callModule(
+    module = plots_server, id = "plots", file_input = data_to_pass(),
+    non_factor_variables = non_factor_variables
+  ) # FIX: Pass reactive expression, not its value
 
-  ##  Output: Variance analysis
-  observe(
-    if (substr(input$tabs, 1, 5) == "varia") {
-      callModule(
-        module = variance_server,
-        id = input$tabs,
-        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
-        digits = input$digits
-      )
-    }
-  )
+  callModule(module = correlation_server, id = "correlation", file_input = data_to_pass(), settings = settings)
+  callModule(module = regression_server, id = "regression", file_input = data_to_pass(), settings = settings)
+  callModule(module = variance_server, id = "variance", file_input = data_to_pass(), settings = settings)
 }
 
 # Run the application

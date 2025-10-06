@@ -61,7 +61,6 @@ variance_ui <- function(id) {
             fluidRow(
                 column(
                     width = 12,
-                    # MODIFICATION: Use uiOutput for dynamic plot height
                     uiOutput(ns("plot_ui")),
                     h2("Assumption checks"),
                     h3("Homogeneity of variance assumption"),
@@ -72,8 +71,6 @@ variance_ui <- function(id) {
                     tableOutput(ns("normality")),
                     br(),
                     htmlOutput(ns("normality_text")),
-                    tableOutput(ns("equality_of_covariances")),
-                    tableOutput(ns("sphericity")),
                     h2("Results"),
                     h3("Fisher's ANOVA (assuming equal variances)"),
                     h5("ANOVA table for Fisher's ANOVA"),
@@ -109,8 +106,7 @@ variance_ui <- function(id) {
 
 variance_server <- function(
     input, output, session,
-    file_input, digits) {
-    # Update the choices of the pickerInput based on file_input$df
+    file_input, settings) {
     observeEvent(file_input$df, {
         updatePickerInput(
             session = session, inputId = "outcome",
@@ -155,12 +151,10 @@ variance_server <- function(
         }
     })
 
-    # MODIFICATION: Dynamic plot UI generation
     output$plot_ui <- renderUI({
         ns <- session$ns
         req(input$predictors)
         num_predictors <- length(input$predictors)
-        # Calculate height: 400px for the first predictor, 350px for each additional one
         plot_height <- 400 + (num_predictors - 1) * 350
         plotOutput(ns("boxplot"), height = paste0(plot_height, "px"))
     })
@@ -169,9 +163,7 @@ variance_server <- function(
         {
             req(model())
             num_predictors <- length(input$predictors)
-            # Set layout to have 2 columns (Boxplot, QQ plot) and rows for each predictor
             layout(matrix(1:(num_predictors * 2), ncol = 2, byrow = TRUE))
-
             par(cex.axis = 0.8, cex.lab = 0.8, cex.main = 0.9)
 
             for (pred in input$predictors) {
@@ -191,8 +183,7 @@ variance_server <- function(
 
     levene <- reactive({
         req(model())
-        # Call helper function
-        run_levene_test(formula(), df(), input$type, digits)
+        run_levene_test(formula(), df(), input$type, settings()$digits)
     })
 
     output$homogeneity <- function() {
@@ -223,17 +214,15 @@ variance_server <- function(
     output$normality <- function() {
         req(shapiro())
         res <- shapiro()
+        current_settings <- settings()
         normality <- data.frame(
             Test = res$method,
             Statistic = res$statistic,
-            p.value = if (res$p.value < 0.001) "< 0.001" else sprintf(paste0("%.", digits, "f"), res$p.value)
+            p.value = if (res$p.value < 0.001) "< 0.001" else sprintf(paste0("%.", current_settings$p_digits, "f"), res$p.value)
         )
         normality %>%
-            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", digits, "f"), .)) %>%
-            knitr::kable("html",
-                align = c("l", "c", "c"), escape = FALSE,
-                col.names = c(" ", "W statistic", "p-value"), row.names = FALSE
-            ) %>%
+            dplyr::mutate(Statistic = sprintf(paste0("%.", current_settings$digits, "f"), Statistic)) %>%
+            knitr::kable("html", align = c("l", "c", "c"), escape = FALSE, col.names = c(" ", "W statistic", "p-value"), row.names = FALSE) %>%
             kableExtra::kable_classic(full_width = FALSE, html_font = "inherit", position = "left")
     }
 
@@ -253,16 +242,17 @@ variance_server <- function(
 
     output$anova_results <- function() {
         req(model())
-        # The logic for building the specific ANOVA table remains here as it's highly tied to the UI inputs
-        # ... (ANOVA table logic remains unchanged)
-        # This part is complex and specific to the UI state, so leaving it here is reasonable.
+        current_settings <- settings()
+
+        omt_summary <- summary(overall_model_test())
+        omt_fstat <- omt_summary$fstatistic
         model_data <- data.frame(
             Term = "Overall model test",
-            SS = sum((overall_model_test()$fitted.values - mean(overall_model_test()$model[[input$outcome]]))^2),
-            Df = summary(overall_model_test())$fstatistic[2],
-            MS = sum((overall_model_test()$fitted.values - mean(overall_model_test()$model[[input$outcome]]))^2) / summary(overall_model_test())$fstatistic[2],
-            F = summary(overall_model_test())$fstatistic[1],
-            p.value = pf(summary(overall_model_test())$fstatistic[1], summary(overall_model_test())$fstatistic[2], summary(overall_model_test())$fstatistic[3], lower.tail = FALSE)
+            SS = sum((fitted(overall_model_test()) - mean(overall_model_test()$model[[input$outcome]]))^2),
+            Df = omt_fstat[2],
+            MS = sum((fitted(overall_model_test()) - mean(overall_model_test()$model[[input$outcome]]))^2) / omt_fstat[2],
+            F = omt_fstat[1],
+            p.value = pf(omt_fstat[1], omt_fstat[2], omt_fstat[3], lower.tail = FALSE)
         )
         if (input$type == "Factorial ANOVA with interactions") {
             model_intercept <- as.data.frame(broom::tidy(car::Anova(model(), type = 3)))
@@ -275,8 +265,9 @@ variance_server <- function(
             colnames(nonintercept) <- colnames(model_data)
             model_data <- rbind(model_data, nonintercept)
         }
+
         model_data %>%
-            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", digits, "f"), .)) %>%
+            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", current_settings$digits, "f"), .)) %>%
             knitr::kable("html",
                 align = c("l", rep("c", 5)), escape = FALSE,
                 col.names = c(" ", "Sum of Squares", "Df", "Mean Square", "F", "p-value"), row.names = FALSE
@@ -285,20 +276,20 @@ variance_server <- function(
     }
 
     output$anova_results_welch <- function() {
-        # ... (Welch's ANOVA logic remains unchanged)
         req(model())
+        current_settings <- settings()
         welch_model <- oneway.test(formula(), data = df(), var.equal = FALSE)
         effect_eta <- effectsize::eta_squared(welch_model, partial = FALSE, verbose = FALSE)
         effect_omega <- effectsize::omega_squared(welch_model, partial = FALSE, verbose = FALSE)
         welchanova <- data.frame(
             Term = "Overall model", F = welch_model$statistic, df1 = welch_model$parameter[1], df2 = welch_model$parameter[2], p.value = welch_model$p.value,
             eta_squared = effect_eta[[1]],
-            eta_squared_CI = paste(sprintf(paste0("%.", digits, "f"), effect_eta[[3]]), sprintf(paste0("%.", digits, "f"), effect_eta[[4]]), sep = "–"),
+            eta_squared_CI = paste(sprintf(paste0("%.", current_settings$digits, "f"), effect_eta[[3]]), sprintf(paste0("%.", current_settings$digits, "f"), effect_eta[[4]]), sep = "–"),
             omega_squared = effect_omega[[1]],
-            omega_squared_CI = paste(sprintf(paste0("%.", digits, "f"), effect_omega[[3]]), sprintf(paste0("%.", digits, "f"), effect_omega[[4]]), sep = "–")
+            omega_squared_CI = paste(sprintf(paste0("%.", current_settings$digits, "f"), effect_omega[[3]]), sprintf(paste0("%.", current_settings$digits, "f"), effect_omega[[4]]), sep = "–")
         )
         welchanova %>%
-            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", digits, "f"), .)) %>%
+            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", current_settings$digits, "f"), .)) %>%
             knitr::kable("html",
                 align = c("l", rep("c", 8)),
                 col.names = c(" ", "F", "df1", "df2", "p-value", "η²", "95% CI", "ω²", "95% CI"), row.names = FALSE
@@ -310,10 +301,8 @@ variance_server <- function(
 
     output$anova_effect_sizes <- function() {
         req(model())
-        # Call helper function
-        effect_sizes <- calculate_anova_effect_sizes(model(), digits)
+        effect_sizes <- calculate_anova_effect_sizes(model(), settings()$digits)
 
-        # Display logic remains here as it's about presentation
         if (length(input$predictors) < 2) {
             display_df <- effect_sizes %>% select(Term, Eta2, Eta2_CI, Eta2_interp, Omega2, Omega2_CI, Omega2_interp)
             col_names <- c(" ", "η²", "95% CI", " ", "ω²", "95% CI", " ")
@@ -328,10 +317,7 @@ variance_server <- function(
             knitr::kable("html", align = c("l", rep("c", ncol(display_df) - 1)), escape = FALSE, col.names = col_names, row.names = FALSE) %>%
             kableExtra::kable_classic(full_width = FALSE, html_font = "inherit", position = "left") %>%
             kableExtra::add_header_above(header) %>%
-            kableExtra::footnote(
-                general_title = "Note on interpretation:",
-                general = "Effect size interpretation follows Field (2013).", escape = FALSE
-            )
+            kableExtra::footnote(general_title = "Note on interpretation:", general = "Effect size interpretation follows Field (2013).", escape = FALSE)
     }
 
     output$results_text <- renderText({
@@ -341,13 +327,14 @@ variance_server <- function(
 
     output$kruskal_table <- function() {
         req(model())
-        # Call helper function
-        kruskal_df <- run_kruskal_wallis(input$outcome, input$predictors, df(), digits)
-
+        kruskal_df <- run_kruskal_wallis(input$outcome, input$predictors, df(), settings()$digits)
         req(nrow(kruskal_df) > 0)
 
         kruskal_df %>%
-            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", digits, "f"), .)) %>%
+            dplyr::mutate(
+                across(where(is.numeric), ~ sprintf(paste0("%.", settings()$digits, "f"), .)),
+                p.value = if_else(as.numeric(p.value) < 0.001, "< 0.001", sprintf(paste0("%.", settings()$p_digits, "f"), as.numeric(p.value)))
+            ) %>%
             knitr::kable("html",
                 align = c("l", rep("c", 5)), escape = FALSE,
                 col.names = c(" ", "χ² Statistic", "df", "p-value", "ε²", "95% CI"), row.names = FALSE
@@ -366,8 +353,9 @@ variance_server <- function(
     })
 
     output$tukey_hsd_table <- function() {
-        # ... (Tukey HSD logic remains unchanged as it's complex and UI-dependent)
         req(model(), input$posthoc_terms)
+        current_digits <- settings()$digits
+
         tukey_df <- as.data.frame(TukeyHSD(model(), which = input$posthoc_terms)[[1]]) %>%
             tibble::rownames_to_column(var = "terms") %>%
             tidyr::separate(terms, c("group1", "group2"), sep = "-") %>%
@@ -395,7 +383,7 @@ variance_server <- function(
         final_col_names <- c(col_names, "Mean Difference", "Lower Bound", "Upper Bound", "p-value")
 
         tukey_df %>%
-            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", digits, "f"), .)) %>%
+            dplyr::mutate_if(is.numeric, ~ sprintf(paste0("%.", current_digits, "f"), .)) %>%
             knitr::kable("html",
                 caption = "Tukey's HSD test (equal variances assumed)",
                 align = c("l", rep("c", ncol(tukey_df) - 1)), escape = FALSE, row.names = FALSE, col.names = final_col_names
