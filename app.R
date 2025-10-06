@@ -109,21 +109,31 @@ ui <- dashboardPage(
 server <- function(input, output, session) {
   # Call modules
   #  Input: Getting Started
+  # A 'file_input' mostantól egy reactiveValues objektum, ami tartalmazza a df_raw és df_filtered adatokat
   file_input <- callModule(
     module = getting_started_server,
     id = "getting_started"
   )
 
-  # Non-factor variables
+  # --- ÚJ REAKTÍV A SZŰRT ADATOKNAK ---
+  # Ez a reaktív biztosítja, hogy minden analitikai modul a szűrt adatokat használja.
+  # A file_input$df_filtered reaktív értékre figyel.
+  data_to_pass <- reactive({
+    # Biztosítjuk, hogy csak akkor fusson, ha már van adat
+    req(file_input$df_filtered)
+
+    # A moduloknak egy egyszerű data.frame-et adunk át, nem a teljes reactiveValues objektumot
+    list(df = file_input$df_filtered)
+  })
+  # --- EDDIG ---
+
+  # Non-factor variables (a szűrt adatok alapján)
   non_factor_variables <- reactive({
-    if (length(file_input$df) > 0) {
-      return(
-        names(file_input$df)[sapply(
-          file_input$df,
-          function(x) !inherits(x, "factor")
-        )]
-      )
-    }
+    req(data_to_pass()$df)
+    names(data_to_pass()$df)[sapply(
+      data_to_pass()$df,
+      function(x) !inherits(x, "factor")
+    )]
   })
 
   ##  Output: Descriptive statistics
@@ -132,7 +142,7 @@ server <- function(input, output, session) {
       callModule(
         module = descriptive_server,
         id = input$tabs,
-        file_input = file_input,
+        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
         non_factor_variables = non_factor_variables(),
         digits = input$digits,
         p_value_digits = input$p_value_digits,
@@ -147,7 +157,7 @@ server <- function(input, output, session) {
       callModule(
         module = regression_server,
         id = input$tabs,
-        file_input = file_input,
+        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
         digits = input$digits
       )
     }
@@ -159,7 +169,7 @@ server <- function(input, output, session) {
       callModule(
         module = variance_server,
         id = input$tabs,
-        file_input = file_input,
+        file_input = data_to_pass(), # <--- Itt a szűrt adatot adjuk át
         digits = input$digits
       )
     }
