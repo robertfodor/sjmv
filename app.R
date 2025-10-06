@@ -12,6 +12,7 @@ source("modules/getting_started.R") # Welcome and data import
 source("modules/descriptive.R") # Descriptive statistics
 source("modules/regression.R") # Regression analysis
 source("modules/variance.R") # Variance analysis
+source("R/diagnostics.R") # Regression diagnostics
 
 # Define UI for application
 ui <- dashboardPage(

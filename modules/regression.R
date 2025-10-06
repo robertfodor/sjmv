@@ -8,11 +8,13 @@ library(olsrr) # vif, tolerance
 library(reghelper) # regression analysis (switch from lm.beta)
 library(knitr) # for kable
 library(kableExtra) # extra formatting for kable
+library(ggplot2) # for plotting diagnostics
 
 # UI
 regression_ui <- function(id) {
     ns <- NS(id)
     tagList(
+        withMathJax(), # <--- ADD THIS LINE
         fluidPage(
             fluidRow(
                 column(
@@ -77,13 +79,62 @@ regression_ui <- function(id) {
                     tableOutput(ns("model_change_measures")),
                     h3("Model Coefficients"),
                     tableOutput(ns("model_coefficients")),
+
+                    # --- MODIFIED DIAGNOSTICS SECTION ---
                     h3("Model Diagnostics"),
+                    # Keep the original collinearity output
                     tableOutput(ns("collinearity")),
-                    tableOutput(ns("autocorrelation")),
-                    tableOutput(ns("homoscedasticity")),
-                    tableOutput(ns("influence")),
-                    tableOutput(ns("leverage")),
-                    plotOutput(ns("qq_residuals"))
+
+                    # --- START: NEW UI SECTION INSERTED HERE ---
+                    fluidRow(
+                        box(
+                            title = "Advanced Diagnostic Controls",
+                            status = "primary",
+                            solidHeader = TRUE,
+                            width = 12,
+                            collapsible = TRUE,
+                            collapsed = FALSE, # Start open for visibility
+                            fluidRow(
+                                column(
+                                    width = 4,
+                                    checkboxGroupInput(
+                                        inputId = ns("diagnostic_checks"),
+                                        label = "Select diagnostics to run:",
+                                        choices = c(
+                                            "Cook's Distance" = "cook",
+                                            "DFBETA" = "dfbeta",
+                                            "Leverage" = "leverage",
+                                            "Mahalanobis Distance" = "mahalanobis"
+                                        ),
+                                        selected = c("cook", "leverage")
+                                    )
+                                ),
+                                column(
+                                    width = 4,
+                                    materialSwitch(
+                                        inputId = ns("show_plots"),
+                                        label = "Generate diagnostic plots",
+                                        value = TRUE,
+                                        status = "success"
+                                    ),
+                                    actionButton(
+                                        inputId = ns("run_diagnostics"),
+                                        label = "Run Advanced Diagnostics",
+                                        icon = icon("play-circle"),
+                                        class = "btn-primary"
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                    fluidRow(
+                      column(
+                        width = 12,
+                        # A single UI placeholder for all diagnostic output
+                        uiOutput(ns("diagnostic_output_ui"))
+                      )
+                    )
+                   
                 )
             )
         )
@@ -236,7 +287,7 @@ regression_server <- function(
                                 summary(models()[[i]])$fstatistic[3], 0
                             )),
                             p_value = if (p_value < 0.001) {
-                                "< 0.001"
+                                "< 0.001"
                             } else {
                                 sprintf(paste0("%.", digits, "f"), p_value)
                             },
@@ -282,7 +333,7 @@ regression_server <- function(
                                 length(models()) > 1 & i > 1,
                                 summary(models()[[i]])$r.squared -
                                     summary(models()[[i - 1]])$r.squared,
-                                #  R squared for the first model
+                                #  R squared for the first model
                                 summary(models()[[i]])$r.squared
                             ),
                             fstat.change = ifelse(
@@ -342,21 +393,21 @@ regression_server <- function(
                 coefficients <- rbind(
                     coefficients,
                     data.frame(
-                        #  First column is the model number
+                        #  First column is the model number
                         model = paste0(i),
-                        #  Second column is the variable name
+                        #  Second column is the variable name
                         variable = names(
                             models()[[i]]$coefficients
                         ),
-                        #  Third column is the coefficient
+                        #  Third column is the coefficient
                         coefficient = summary(models()[[i]])$coefficients[
                             , 1
                         ],
-                        #  Fourth column is the standard error
+                        #  Fourth column is the standard error
                         se = summary(models()[[i]])$coefficients[, 2],
-                        #  Fifth column is the t statistic
+                        #  Fifth column is the t statistic
                         tstat = summary(models()[[i]])$coefficients[, 3],
-                        #  Sixth column is the p value
+                        #  Sixth column is the p value
                         #   If the p value is less than 0.001, return "<0.001"
                         p.value = ifelse(
                             round(summary(
@@ -367,7 +418,7 @@ regression_server <- function(
                                 models()[[i]]
                             )$coefficients[, 4], digits = digits))
                         ),
-                        #   Seventh column is the Standardized β
+                        #   Seventh column is the Standardized β
                         std.beta = reghelper::beta(
                             models()[[i]]
                         )$coefficients[, 1]
@@ -425,6 +476,7 @@ regression_server <- function(
         }
     }
 
+    # Collinearity diagnostics table
     output$collinearity <- function() {
         tolvif <- data.frame()
 
@@ -511,4 +563,145 @@ regression_server <- function(
                 )
         }
     }
+
+    # --- START: NEW ADVANCED DIAGNOSTICS SERVER LOGIC ---
+
+    # 1. Create a reactiveVal to store diagnostic results
+    diagnostic_results <- reactiveVal(NULL)
+
+    # 2. Run diagnostics when the button is clicked
+    observeEvent(input$run_diagnostics, {
+        # Ensure a model exists
+        req(length(models()) > 0, cancelOutput = TRUE)
+
+        # Use the *final* model for diagnostics
+        final_model <- models()[[length(models())]]
+        model_data <- df() # Use the reactive data frame for the model
+
+        # Show a notification
+        showNotification("Running advanced regression diagnostics...", type = "message", duration = 2)
+
+        # Call your function with parameters from the UI
+        results <- diagnose_regression(
+            model = final_model,
+            data = model_data,
+            check_cook = "cook" %in% input$diagnostic_checks,
+            check_dfbeta = "dfbeta" %in% input$diagnostic_checks,
+            check_leverage = "leverage" %in% input$diagnostic_checks,
+            check_mahalanobis = "mahalanobis" %in% input$diagnostic_checks,
+            plot_diagnostics = input$show_plots,
+            verbose = FALSE # <--- ADD THIS LINE TO SUPPRESS LOGGING
+        )
+
+        # Store the results in the reactiveVal
+        diagnostic_results(results)
+    })
+    
+    # --- PASTE THIS NEW CODE IN ITS PLACE ---
+    
+    # 3. Generate the UI Placeholders for all diagnostic output
+    output$diagnostic_output_ui <- renderUI({
+      req(diagnostic_results())
+      ns <- session$ns
+      
+      # We need to check which results have data to display
+      # This includes tests that ran but found no outliers
+      all_tests_run <- names(diagnostic_results()$cutoffs)
+      
+      # Create UI for each test that was run
+      tag_list <- lapply(all_tests_run, function(name) {
+        results_list <- diagnostic_results()$results
+        title <- case_when(
+          name == "cooks_distance" ~ "Cook's Distance Outliers",
+          name == "dfbeta" ~ "DFBETA Influential Points",
+          name == "leverage" ~ "High Leverage Points",
+          name == "mahalanobis" ~ "Mahalanobis Distance Outliers",
+          TRUE ~ name
+        )
+        
+        # Check if this test found any outliers
+        if (name %in% names(results_list) && nrow(results_list[[name]]$data) > 0) {
+          # If yes, create placeholder for table and note
+          tagList(
+            h4(title),
+            tableOutput(ns(paste0("diag_table_", name))),
+            uiOutput(ns(paste0("diag_note_", name)))
+          )
+        } else {
+          # If no outliers found, just show the note
+          tagList(
+            h4(title),
+            p("No outliers were detected using the following cutoff:"),
+            uiOutput(ns(paste0("diag_note_", name)))
+          )
+        }
+      })
+      
+      # Create plot placeholders
+      plots_list <- diagnostic_results()$plots
+      plot_tags <- NULL
+      if(input$show_plots && length(plots_list) > 0) {
+        plot_tags <- tagList(
+          h3("Diagnostic Plots"),
+          lapply(names(plots_list), function(name) {
+            plotOutput(ns(paste0("diag_plot_", name)))
+          })
+        )
+      }
+      
+      # Combine everything into boxes
+      tagList(
+        box(title = "Advanced Diagnostics Results", status = "info", solidHeader = TRUE, width = 12, tag_list),
+        if (!is.null(plot_tags)) {
+          box(title = "Diagnostic Plots", status = "info", solidHeader = TRUE, width = 12, collapsible = TRUE, plot_tags)
+        }
+      )
+    })
+    
+    # 4. Create the Renderers in a separate observer
+    observe({
+      req(diagnostic_results())
+      results_list <- diagnostic_results()$results
+      plots_list <- diagnostic_results()$plots
+      formulas_list <- diagnostic_results()$formulas
+      cutoffs_list <- diagnostic_results()$cutoffs
+      
+      # Create renderers for all tests that were run
+      for (name in names(cutoffs_list)) {
+        local({
+          my_name <- name
+          
+          # Create table renderer if there is data
+          if (my_name %in% names(results_list) && nrow(results_list[[my_name]]$data) > 0) {
+            my_data <- results_list[[my_name]]$data
+            output[[paste0("diag_table_", my_name)]] <- renderTable({ my_data }, digits = digits)
+          }
+          
+          # Create note renderer
+          my_formula <- formulas_list[[my_name]]
+          my_cutoff <- cutoffs_list[[my_name]]
+          output[[paste0("diag_note_", my_name)]] <- renderUI({
+            # Wrap with withMathJax() to ensure dynamic LaTeX is rendered
+            withMathJax(
+              helpText(HTML(paste(
+                my_formula,
+                "<br><em>Calculated Cutoff:</em>",
+                round(my_cutoff, 4)
+              )))
+            )
+          })
+        })
+      }
+      
+      # Create plot renderers
+      if (input$show_plots && length(plots_list) > 0) {
+        for (name in names(plots_list)) {
+          local({
+            my_name <- name
+            my_plot <- plots_list[[my_name]]
+            output[[paste0("diag_plot_", my_name)]] <- renderPlot({ my_plot })
+          })
+        }
+      }
+    })
 }
