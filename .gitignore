@@ -1,4 +1,10 @@
+.gitignore
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+rsconnect/.DS_Store
+rsconnect/shinyapps.io/.DS_Store
+
+
