@@ -1,4 +1,4 @@
-# R/plots.R
+# R/diagnostics.R
 library(ggplot2)
 library(ggrepel)
 library(dplyr)

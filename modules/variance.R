@@ -1,4 +1,4 @@
-# Variance analysis
+# modules/variance.R
 library(shiny)
 library(dplyr) # for data manipulation
 library(shinyWidgets) # for custom widgets

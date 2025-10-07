@@ -1,5 +1,4 @@
-# This is the regression tab.
-# It takes as input the datafile uploaded in the Getting Started tab.
+# modules/regression.R
 library(shiny)
 library(dplyr) # for data manipulation
 library(gridExtra) # for grid.arrange

@@ -55,7 +55,7 @@ descriptive_ui <- function(id) {
                 ),
                 column(
                     width = 3,
-                    materialSwitch(inputId = ns("variables_across"), label = "Transpose Table (Variables Across)", value = TRUE, status = "info")
+                    materialSwitch(inputId = ns("variables_across"), label = "Variables in header", value = FALSE, status = "info")
                 )
             ),
             hr(),

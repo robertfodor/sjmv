@@ -1,5 +1,4 @@
-# Module for welcome page and data import
-#   It passes on the uploaded data to the descriptive module
+# modules/getting_started.R
 library(shiny)
 library(shinydashboard)
 library(haven) # needed for sjlabelled to work on shinyapps.io
